@@ -1,0 +1,320 @@
+export type Platform = "fiverr" | "upwork" | "direct";
+export type OpportunityType = "bid" | "pre_sales" | "direct";
+export type OpportunityStage = "lead" | "proposal" | "negotiation" | "active" | "won" | "lost";
+export type BidStatus = "no_response" | "only_viewed" | "response" | "interview" | "hired" | "rejected";
+export type FollowupStatus = "pending" | "follow_up" | "accepted" | "complete" | "nra" | "no_response" | "archived";
+export type ProjectStatus = "wip" | "submitted" | "revision" | "delivered" | "complete" | "cancelled" | "nra" | "client_update";
+export type InvoiceStatus = "draft" | "pending" | "paid" | "overdue";
+export type MilestoneStatus = "pending" | "in_progress" | "done";
+export type ActivityType = "note" | "email" | "call" | "meeting" | "follow_up" | "bid" | "proposal_sent" | "status_change" | "invoice" | "import" | "system";
+export type Priority = "low" | "medium" | "high" | "urgent";
+export type ImportEntity = "opportunities" | "projects" | "clients";
+export type EntityType = "client" | "opportunity" | "project" | "invoice" | "import";
+
+// ---------------------------------------------------------------------------
+// Row shapes (mirror supabase/schema.sql exactly)
+// ---------------------------------------------------------------------------
+
+export interface Profile {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: string;
+  currency: string;
+  default_fee_percent: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Account {
+  id: string;
+  user_id: string;
+  name: string;
+  platform: Platform;
+  username: string | null;
+  profile_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TeamRole = "ceo" | "executive" | "developer" | "designer";
+
+export interface TeamMember {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Client {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string | null;
+  company: string | null;
+  platform: Platform | null;
+  username: string | null;
+  profile_url: string | null;
+  category: string | null;
+  account_id: string | null;
+  tags: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Opportunity {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  client_id: string | null;
+  account_id: string | null;
+  platform: Platform;
+  type: OpportunityType;
+  stage: OpportunityStage;
+  status: BidStatus | null;
+  follow_up_status: FollowupStatus;
+  amount: number;
+  currency: string;
+  connects_spent: number;
+  source_url: string | null;
+  due_date: string | null;
+  next_follow_up: string | null;
+  assigned_to: string | null;
+  lost_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  user_id: string;
+  opportunity_id: string | null;
+  client_id: string | null;
+  account_id: string | null;
+  project_name: string;
+  order_date: string | null;
+  assigned_to: string | null;
+  developer: string | null;
+  website_link: string | null;
+  project_type: string | null;
+  delivery_deadline: string | null;
+  gross_amount: number;
+  fee_percent: number;
+  fee_amount: number;
+  net_amount: number;
+  bonus: number;
+  status: ProjectStatus;
+  priority: Priority;
+  progress: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Milestone {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  order_index: number;
+  status: MilestoneStatus;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Granular per-project to-do items (unlike milestones these carry an
+// assignee + due date and are quick day-to-day tasks).
+export interface ProjectTodo {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  status: MilestoneStatus;
+  due_date: string | null;
+  assignee: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Client login / access details for a project (WP admin, cPanel, FTP, ...).
+// Passwords are stored in the app DB and masked in the UI until revealed.
+export interface ProjectCredential {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// A person attached to a project (General Manager, Project Manager,
+// Developer, Tester, Sales, ...). Links to team_members when available;
+// name + role_label are snapshotted so the roster survives member edits.
+export interface ProjectTeamMember {
+  id: string;
+  user_id: string;
+  project_id: string;
+  team_member_id: string | null;
+  name: string;
+  role_label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Passwords NEVER ship to the client: the UI only learns whether one exists
+// and fetches the value on demand via a server action when revealed.
+export type ProjectCredentialView = Omit<ProjectCredential, "password"> & {
+  has_password: boolean;
+};
+
+export interface Activity {
+  id: string;
+  user_id: string;
+  entity_type: EntityType;
+  entity_id: string;
+  activity_type: ActivityType;
+  subject: string | null;
+  body: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface FollowUp {
+  id: string;
+  user_id: string;
+  opportunity_id: string | null;
+  client_id: string | null;
+  platform: Platform;
+  conversation_url: string | null;
+  status: FollowupStatus;
+  scheduled_at: string | null;
+  last_contact: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  user_id: string;
+  invoice_number: string;
+  client_id: string | null;
+  project_id: string | null;
+  issue_date: string;
+  due_date: string | null;
+  amount: number;
+  currency: string;
+  status: InvoiceStatus;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+export interface Attachment {
+  id: string;
+  user_id: string;
+  entity_type: EntityType;
+  entity_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  mime_type: string | null;
+  created_at: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string;
+  subject: string | null;
+  body: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  user_id: string;
+  name: string;
+  trigger_event: string;
+  trigger_value: string | null;
+  action_type: string;
+  action_data: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportRun {
+  id: string;
+  user_id: string;
+  entity_type: ImportEntity;
+  file_name: string;
+  total_rows: number;
+  imported_rows: number;
+  failed_rows: number;
+  log: Array<{ row: number; error: string }>;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Joined / view models used by the UI
+// ---------------------------------------------------------------------------
+
+export interface OpportunityWithRelations extends Opportunity {
+  client?: Client | null;
+  account?: Account | null;
+}
+
+export interface ProjectWithRelations extends Project {
+  client?: Client | null;
+  account?: Account | null;
+  opportunity?: Opportunity | null;
+  milestones?: Milestone[];
+  invoice?: Invoice | null;
+}
+
+export interface ClientWithRelations extends Client {
+  opportunities?: Opportunity[];
+  projects?: Project[];
+  activities?: Activity[];
+  attachments?: Attachment[];
+  follow_ups?: FollowUp[];
+}
+
+export interface InvoiceWithRelations extends Invoice {
+  client?: Client | null;
+  project?: Project | null;
+  items?: InvoiceItem[];
+}
+
+export type AutomationWithRelations = AutomationRule;
