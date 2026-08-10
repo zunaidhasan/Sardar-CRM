@@ -88,6 +88,11 @@ src/app/(app)/               All app pages: dashboard, pipeline, clients, projec
 > load — a fully populated demo at your deploy URL. Point the env vars at a
 > Supabase project and run `supabase/schema.sql` + `supabase/seed.sql` to
 > switch to the multi-user database mode.
+>
+> **Note for serverless hosts (e.g. Vercel):** the demo store is a local JSON
+> file, which is ephemeral on serverless infrastructure — data (including any
+> logins you create in Settings → Team access) can reset when instances
+> recycle. Use it to explore and demo; connect Supabase for durable storage.
 
 ## License
 
