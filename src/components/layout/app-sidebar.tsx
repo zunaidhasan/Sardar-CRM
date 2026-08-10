@@ -1,8 +1,9 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Moon, Sun } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, Moon, Sun } from "lucide-react";
 import { AppLogo } from "@/components/layout/app-logo";
 import { NAV_MAIN, NAV_SECONDARY, type NavItem } from "@/components/layout/nav-items";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DemoRoleSwitcher } from "@/components/dashboard/demo-role-switcher";
+import { signOutAction } from "@/app/actions";
 import { initials } from "@/lib/utils";
 import type { TeamRole } from "@/lib/types";
 
@@ -54,6 +56,15 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void 
 
 export function AppSidebar({ userName, isDemo, role, onNavigate }: AppSidebarProps) {
   const { resolvedTheme, toggleTheme } = useTheme();
+  const router = useRouter();
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await signOutAction();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
@@ -77,7 +88,7 @@ export function AppSidebar({ userName, isDemo, role, onNavigate }: AppSidebarPro
           <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
             Demo mode active. Add Supabase env vars to go live.
           </div>
-          <DemoRoleSwitcher />
+          <DemoRoleSwitcher currentRole={role} />
         </div>
       )}
 
@@ -111,10 +122,20 @@ export function AppSidebar({ userName, isDemo, role, onNavigate }: AppSidebarPro
               {role ? ROLE_LABELS[role] : isDemo ? "Demo" : "Pro"}
             </Badge>
           </div>
-          <Button variant="ghost" size="icon" onClick={toggleTheme}>
+          <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={handleSignOut}
+          disabled={signingOut}
+        >
+          <LogOut className="h-4 w-4" />
+          {signingOut ? "Signing out…" : "Sign out"}
+        </Button>
       </div>
     </div>
   );

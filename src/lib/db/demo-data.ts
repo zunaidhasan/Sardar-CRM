@@ -1,6 +1,7 @@
 import type {
   Account,
   Activity,
+  AppUser,
   Attachment,
   AutomationRule,
   Client,
@@ -19,8 +20,13 @@ import type {
   TeamMember,
   TeamRole,
 } from "@/lib/types";
+import { hashPassword } from "@/lib/password";
 
 export const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+// Initial password for every seeded demo login. Shown on the login page in
+// demo mode and in the README; agency can change it from Settings.
+export const DEMO_INITIAL_PASSWORD = "sardar2026";
 
 // Demo personas backing the sidebar role switcher. Each role maps to a real
 // person so switching identities never shows a stale name.
@@ -30,6 +36,15 @@ export const DEMO_PERSONAS: Record<TeamRole, { name: string; email: string }> = 
   developer: { name: "Rafi Ahmed", email: "rafi@sardaritbd.com" },
   designer: { name: "Sadia Rahman", email: "sadia@sardaritbd.com" },
 };
+
+// Seeded username logins (shown on the demo login page; initial password is
+// DEMO_INITIAL_PASSWORD for all of them). Agency can add/change from Settings.
+export const DEMO_LOGIN_CREDENTIALS: Array<{ username: string; role: TeamRole }> = [
+  { username: "mamunur", role: "ceo" },
+  { username: "zunaid", role: "executive" },
+  { username: "rafi", role: "developer" },
+  { username: "sadia", role: "designer" },
+];
 
 // Deterministic-ish uuids so the demo store keys are stable.
 const ID = {
@@ -49,6 +64,7 @@ const ID = {
   todos: ["td-1401", "td-1402", "td-1403", "td-1404", "td-1405", "td-1406"],
   credentials: ["cr-1501", "cr-1502", "cr-1503", "cr-1504", "cr-1505"],
   projectTeam: ["pt-1601", "pt-1602", "pt-1603", "pt-1604", "pt-1605", "pt-1606"],
+  users: ["us-1701", "us-1702", "us-1703", "us-1704"],
 } as const;
 
 function d(offsetDays: number): string {
@@ -69,7 +85,7 @@ function dateOnly(offsetDays: number): string {
 // rows, so dashboards always show the requested per-person milestones:
 // 15+ completed projects, $12,000+ revenue, 80%+ win rate for every persona.
 // ---------------------------------------------------------------------------
-export const DEMO_DB_VERSION = 5;
+export const DEMO_DB_VERSION = 6;
 
 const GEN_PERSONAS = [
   { key: "ceo", name: "Mamunur Roshid" },
@@ -379,6 +395,7 @@ export function generatedOpportunities(): Opportunity[] {
 export function buildDemoData(): {
   demo_version: number;
   profile: Profile;
+  users: AppUser[];
   team_members: TeamMember[];
   accounts: Account[];
   clients: Client[];
@@ -423,6 +440,24 @@ export function buildDemoData(): {
       name: persona.name,
       email: persona.email,
       role,
+      is_active: true,
+      created_at: d(offset),
+      updated_at: d(-1),
+    };
+  });
+
+  // Username + password logins provisioned by the agency (no self-registration).
+  // Initial password is DEMO_INITIAL_PASSWORD; agency can change it in Settings.
+  const users: AppUser[] = DEMO_LOGIN_CREDENTIALS.map((cred, i) => {
+    const persona = DEMO_PERSONAS[cred.role];
+    const offset = cred.role === "ceo" ? -400 : cred.role === "executive" ? -200 : cred.role === "developer" ? -90 : -60;
+    return {
+      id: ID.users[i] ?? `us-17${i + 1}`,
+      username: cred.username,
+      password_hash: hashPassword(DEMO_INITIAL_PASSWORD),
+      name: persona.name,
+      email: persona.email,
+      role: cred.role,
       is_active: true,
       created_at: d(offset),
       updated_at: d(-1),
@@ -597,6 +632,7 @@ export function buildDemoData(): {
   return {
     demo_version: DEMO_DB_VERSION,
     profile,
+    users,
     team_members,
     accounts,
     clients,

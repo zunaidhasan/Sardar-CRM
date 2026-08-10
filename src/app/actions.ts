@@ -19,6 +19,7 @@ import type {
   ProjectCredential,
   ProjectTeamMember,
   ProjectTodo,
+  TeamRole,
 } from "@/lib/types";
 import { resetDemo, demoDbPath } from "@/lib/db/demo-store";
 import { generateProposal, type ProposalTone } from "@/lib/proposal";
@@ -620,8 +621,46 @@ export async function createAccountAction(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Auth (username + password; no public self-registration)
+// ---------------------------------------------------------------------------
+export async function loginAction(
+  username: string,
+  password: string,
+): Promise<ActionResult> {
+  try {
+    const result = await data.loginWithUsername(username, password);
+    if (!result.ok) return { ok: false, error: result.error ?? "Login failed" };
+    if (data.isDemoModeSafe()) {
+      const { cookies } = await import("next/headers");
+      const store = await cookies();
+      // Start every session on the user's own role: clear any preview persona
+      // cookie left behind by a previous login.
+      store.delete("sardar_demo_role");
+      store.set(data.DEMO_SESSION_COOKIE, username.trim(), {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login failed" };
+  }
+}
+
 export async function signOutAction(): Promise<ActionResult> {
   try {
+    if (data.isDemoModeSafe()) {
+      const { cookies } = await import("next/headers");
+      const store = await cookies();
+      store.delete(data.DEMO_SESSION_COOKIE);
+      // A leftover demo preview persona must never bleed into the next user's
+      // session.
+      store.delete("sardar_demo_role");
+      return { ok: true };
+    }
     const { createServerSupabase } = await import("@/lib/supabase/server");
     const client = await createServerSupabase();
     if (client) {
@@ -631,6 +670,50 @@ export async function signOutAction(): Promise<ActionResult> {
     return { ok: true };
   } catch {
     return { ok: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agency user provisioning (CEO only — employees never self-register)
+// ---------------------------------------------------------------------------
+export async function createUserAction(input: {
+  username: string;
+  password: string;
+  name: string;
+  email?: string;
+  role: string;
+}): Promise<ActionResult<{ id: string; username: string }>> {
+  try {
+    const actor = await data.requireUser();
+    const user = await data.createUserAccount(actor, {
+      username: input.username,
+      password: input.password,
+      name: input.name,
+      email: input.email,
+      role: input.role as never,
+    });
+    revalidatePath("/settings");
+    return { ok: true, data: { id: user.id, username: user.username } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create user" };
+  }
+}
+
+export async function updateUserAction(
+  username: string,
+  patch: { password?: string; is_active?: boolean; role?: string },
+): Promise<ActionResult> {
+  try {
+    const actor = await data.requireUser();
+    await data.updateUserAccount(actor, username, {
+      password: patch.password,
+      is_active: patch.is_active,
+      role: patch.role as TeamRole | undefined,
+    });
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update user" };
   }
 }
 

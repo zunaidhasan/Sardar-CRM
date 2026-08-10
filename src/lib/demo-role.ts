@@ -17,11 +17,11 @@ export function setDemoRoleCookie(role: TeamRole): void {
   document.cookie = `${DEMO_ROLE_COOKIE}=${role}; path=/; max-age=86400; samesite=lax`;
 }
 
-export function getDemoRoleFromClient(): TeamRole {
-  if (typeof document === "undefined") return "ceo";
+export function getDemoRoleFromClient(fallback: TeamRole = "ceo"): TeamRole {
+  if (typeof document === "undefined") return fallback;
   const match = document.cookie
     .split("; ")
     .find((c) => c.startsWith(`${DEMO_ROLE_COOKIE}=`));
   const value = match?.split("=")[1];
-  return isTeamRole(value) ? value : "ceo";
+  return isTeamRole(value) ? value : fallback;
 }

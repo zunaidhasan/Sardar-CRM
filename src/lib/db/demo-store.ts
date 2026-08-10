@@ -17,6 +17,7 @@ import { normalizeDate } from "@/lib/import-validation";
 import type {
   Account,
   Activity,
+  AppUser,
   Attachment,
   AutomationRule,
   Client,
@@ -35,11 +36,13 @@ import type {
   TeamMember,
   TeamRole,
 } from "@/lib/types";
+import { hashPassword } from "@/lib/password";
 import { uid } from "@/lib/utils";
 
 export interface DemoDB {
   demo_version: number;
   profile: Profile;
+  users: AppUser[];
   team_members: TeamMember[];
   accounts: Account[];
   clients: Client[];
@@ -89,7 +92,7 @@ export function loadDB(): DemoDB {
         // older persisted files keep working without a full reseed. New
         // sections get the built-in demo rows (deterministic IDs referencing
         // seeded projects), not empty arrays, so the UI shows them working.
-        const NEW_TABLES = ["project_todos", "project_credentials", "project_team_members"] as const;
+        const NEW_TABLES = ["users", "project_todos", "project_credentials", "project_team_members"] as const;
         const missingTables = NEW_TABLES.filter(
           (t) => !Array.isArray((parsed as unknown as Record<string, unknown>)[t]),
         );
@@ -98,9 +101,9 @@ export function loadDB(): DemoDB {
           for (const t of missingTables) {
             (parsed as unknown as Record<string, unknown>)[t] = fresh[t];
           }
-          cache = parsed;
-          saveDB(cache);
-          return parsed;
+          // No early return: fall through so the version merge below also
+          // runs in the same pass (old files missing new tables AND holding
+          // an older demo_version get fully upgraded in one load).
         }
         // Version bump: append generated demo rows (deterministic ids) to
         // older persisted files WITHOUT touching user-created rows, so the
@@ -239,7 +242,9 @@ export function loadDB(): DemoDB {
           saveDB(cache);
           return parsed;
         }
+        // Persist backfilled tables even when no other migration fired.
         cache = parsed;
+        saveDB(cache);
         return parsed;
       }
     }
@@ -329,6 +334,57 @@ export function getAccounts(userId: string): Account[] {
 }
 export function getTeamMembers(userId: string): TeamMember[] {
   return loadDB().team_members.filter((t) => t.user_id === userId);
+}
+
+// ---------------------------------------------------------------------------
+// Users (username + password logins provisioned by the agency)
+// ---------------------------------------------------------------------------
+export function getUsers(): AppUser[] {
+  return loadDB().users;
+}
+
+export function findUserByUsername(username: string): AppUser | undefined {
+  return loadDB().users.find(
+    (u) => u.username.toLowerCase() === username.trim().toLowerCase(),
+  );
+}
+
+export function createDemoUser(input: {
+  username: string;
+  password: string;
+  name: string;
+  email?: string | null;
+  role: TeamRole;
+}): AppUser {
+  const now = new Date().toISOString();
+  return insert("users", {
+    username: input.username.trim().toLowerCase(),
+    password_hash: hashPassword(input.password),
+    name: input.name.trim(),
+    email: input.email || null,
+    role: input.role,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  } as unknown as AppUser);
+}
+
+export function updateDemoUser(
+  username: string,
+  patch: { password?: string; is_active?: boolean; role?: TeamRole; name?: string },
+): AppUser | null {
+  const db = loadDB();
+  const user = findUserByUsername(username);
+  if (!user) return null;
+  const next: Record<string, unknown> = { ...user, updated_at: new Date().toISOString() };
+  if (patch.password) next.password_hash = hashPassword(patch.password);
+  if (patch.is_active !== undefined) next.is_active = patch.is_active;
+  if (patch.role) next.role = patch.role;
+  if (patch.name) next.name = patch.name;
+  const idx = db.users.findIndex((u) => u.id === user.id);
+  db.users[idx] = next as unknown as AppUser;
+  commit(db);
+  return db.users[idx]!;
 }
 export function getClients(userId: string): Client[] {
   return loadDB().clients.filter((c) => c.user_id === userId);

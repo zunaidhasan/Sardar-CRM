@@ -18,14 +18,23 @@ Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **shad
 
 ## Quick start (demo mode)
 
-No credentials needed. The app runs fully in demo mode with sample data when Supabase env vars are absent.
+The app runs fully in demo mode with sample data when Supabase env vars are absent.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000 and click **Explore demo** on the login page. Data is stored locally in a JSON file (`os.tmpdir()/sardar-crm-demo-db.json`, override with `DEMO_DB_PATH`). The demo can be reset from **Settings**.
+Open http://localhost:3000 and sign in with one of the **seeded username logins**:
+
+| Username | Role | Initial password |
+| -------- | ---- | ---------------- |
+| `mamunur` | CEO | `sardar2026` |
+| `zunaid` | Executive | `sardar2026` |
+| `rafi` | Developer | `sardar2026` |
+| `sadia` | Designer | `sardar2026` |
+
+Data is stored locally in a JSON file (`os.tmpdir()/sardar-crm-demo-db.json`, override with `DEMO_DB_PATH`). The demo can be reset from **Settings**.
 
 ## Connecting Supabase
 
@@ -39,8 +48,17 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 4. Optional: set `USER_LLM_API_KEY`, `USER_LLM_BASE_URL`, `USER_LLM_MODEL` to enable real AI proposals.
+5. Set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → service_role) to enable **Settings → Team access** for creating employee logins.
 
-Auth uses Supabase email/password. Row-level security guarantees every user sees only their own data. The private `attachments` storage bucket is created by `schema.sql`.
+## Authentication
+
+Sardar CRM uses **username + password** auth — there is **no public self-registration**. Every login is provisioned by agency management:
+
+- The **CEO** opens **Settings → Team access**, clicks **New login**, and creates a username/password for each employee (choosing their role: CEO / Executive / Developer / Designer).
+- Logins can be reset (new password), deactivated, or re-rolled at any time.
+- In demo mode all four seeded logins share the initial password `sardar2026` (change it from Settings).
+
+With Supabase connected, usernames live in `profiles.username`; authentication uses Supabase Auth under the hood, and row-level security guarantees every user sees only their own data. The private `attachments` storage bucket is created by `schema.sql`.
 
 ## Project structure
 

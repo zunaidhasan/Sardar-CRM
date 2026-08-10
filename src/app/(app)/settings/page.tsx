@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { requireUser, fetchAccounts } from "@/lib/data";
+import { requireUser, fetchAccounts, fetchUsers } from "@/lib/data";
 import { isDemoMode } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { AccountManager } from "@/components/settings/account-manager";
+import { TeamAccessManager } from "@/components/settings/team-access-manager";
 import { ResetDemoButton } from "@/components/settings/reset-demo-button";
 
 export const metadata: Metadata = {
@@ -11,8 +12,9 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [accounts, demo] = await Promise.all([
+  const [accounts, users, demo] = await Promise.all([
     fetchAccounts(user.id),
+    (user.realRole ?? user.role) === "ceo" ? fetchUsers(user.id) : Promise.resolve([]),
     Promise.resolve(isDemoMode()),
   ]);
 
@@ -48,6 +50,8 @@ export default async function SettingsPage() {
           </div>
 
           <AccountManager accounts={accounts} />
+
+          {(user.realRole ?? user.role) === "ceo" && <TeamAccessManager users={users} />}
         </section>
 
         <section className="space-y-6">

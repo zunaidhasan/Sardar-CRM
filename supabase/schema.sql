@@ -84,14 +84,21 @@ $$ LANGUAGE plpgsql;
 -- 3.1 profiles -- extends auth.users
 CREATE TABLE IF NOT EXISTS public.profiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username      text,                        -- agency-provided login name (username+password auth)
   full_name     text,
   avatar_url    text,
   role          text NOT NULL DEFAULT 'owner',
   currency      text NOT NULL DEFAULT 'USD',
   default_fee_percent numeric(5,2) NOT NULL DEFAULT 20.00,
+  is_active     boolean NOT NULL DEFAULT true,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Usernames are matched case-insensitively at login, so enforce uniqueness
+-- on the lowercased value.
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower_idx
+  ON public.profiles (lower(username));
 
 CREATE TRIGGER trg_profiles_updated_at BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

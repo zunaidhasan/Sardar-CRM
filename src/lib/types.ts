@@ -17,11 +17,13 @@ export type EntityType = "client" | "opportunity" | "project" | "invoice" | "imp
 
 export interface Profile {
   id: string;
+  username?: string | null;
   full_name: string | null;
   avatar_url: string | null;
   role: string;
   currency: string;
   default_fee_percent: number;
+  is_active?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +41,22 @@ export interface Account {
 }
 
 export type TeamRole = "ceo" | "executive" | "developer" | "designer";
+
+// Login identity for username/password auth. In demo mode these live in the
+// file-backed store (password is a scrypt hash); with Supabase they mirror
+// auth.users + profiles (username column). Agency management provisions them;
+// there is NO public self-registration.
+export interface AppUser {
+  id: string;
+  username: string;
+  password_hash: string | null; // scrypt "salt:hash" (demo only; null for Supabase users)
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface TeamMember {
   id: string;

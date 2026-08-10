@@ -20,9 +20,13 @@ const ROLE_LABELS: Record<TeamRole, string> = {
   designer: "Designer",
 };
 
-export function DemoRoleSwitcher() {
+export function DemoRoleSwitcher({ currentRole }: { currentRole?: TeamRole }) {
   const router = useRouter();
-  const [role, setRole] = React.useState<TeamRole>(() => getDemoRoleFromClient());
+  // No preview cookie yet -> show the signed-in user's effective role instead
+  // of always defaulting to CEO (which used to lie to executives).
+  const [role, setRole] = React.useState<TeamRole>(() =>
+    getDemoRoleFromClient(currentRole),
+  );
 
   function onSelect(next: TeamRole) {
     setRole(next);

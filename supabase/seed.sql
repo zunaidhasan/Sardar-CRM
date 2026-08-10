@@ -24,10 +24,13 @@ BEGIN
     RETURN;
   END IF;
 
-  -- profile
-  INSERT INTO public.profiles (id, full_name, currency, default_fee_percent)
-  VALUES (v_user_id, 'Mamunur Roshid', 'USD', 20.00)
-  ON CONFLICT (id) DO NOTHING;
+  -- profile (username = the login name for username+password auth; initial
+  -- password is whatever you set when creating the auth user, change it via
+  -- Settings -> Team access after first sign-in)
+  INSERT INTO public.profiles (id, username, full_name, currency, default_fee_percent, role)
+  VALUES (v_user_id, 'mamunur', 'Mamunur Roshid', 'USD', 20.00, 'ceo')
+  ON CONFLICT (id) DO UPDATE
+    SET username = EXCLUDED.username, role = EXCLUDED.role, updated_at = now();
 
   -- team members
   INSERT INTO public.team_members (user_id, name, email, role)

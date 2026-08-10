@@ -15,6 +15,7 @@ import type {
   Account,
   Activity,
   ActivityType,
+  AppUser,
   Attachment,
   AutomationRule,
   BidStatus,
@@ -41,6 +42,8 @@ import type {
   TeamMember,
   TeamRole,
 } from "@/lib/types";
+import { verifyPassword } from "@/lib/password";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
 // ===========================================================================
 // Data access layer.
@@ -66,37 +69,57 @@ export interface CurrentUser {
   profile: Profile | null;
   isDemo: boolean;
   role: TeamRole;
+  // The signed-in user's real role (before any demo preview override). Used
+  // for authorization so "Preview as" can never escalate privileges.
+  realRole: TeamRole;
   teamMembers: TeamMember[];
+}
+
+// Demo-mode session cookie: stores the logged-in username.
+export const DEMO_SESSION_COOKIE = "sardar_session";
+
+// Safe alias for server actions (avoids importing utils directly there).
+export function isDemoModeSafe(): boolean {
+  return isDemoMode();
+}
+
+export async function getDemoSessionUser(): Promise<AppUser | null> {
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const username = store.get(DEMO_SESSION_COOKIE)?.value;
+    if (!username) return null;
+    const user = demo.findUserByUsername(username);
+    return user && user.is_active ? user : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (isDemoMode()) {
     const db = demo.loadDB();
-    const role = await getDemoRole();
-    // Pick the team member matching the previewed role; fall back to the
-    // built-in persona so every role switcher option has a stable identity.
-    const matched = db.team_members.find((t) => t.role === role && t.is_active);
-    const persona = matched
-      ? { name: matched.name, email: matched.email ?? null, role: matched.role }
-      : {
-          name: DEMO_PERSONAS[role]?.name ?? null,
-          email: DEMO_PERSONAS[role]?.email ?? null,
-          role,
-        };
+    // Real login: the session cookie names the user. No cookie -> not logged in.
+    const sessionUser = await getDemoSessionUser();
+    if (!sessionUser) return null;
+    // Preview override: the sidebar role switcher cookie (demo mode only)
+    // lets the signed-in user preview the app as another persona. Identity
+    // follows the persona so the UI never shows a mismatched name again.
+    const previewRole = await getDemoRole();
+    const role = previewRole ?? sessionUser.role;
+    const persona = previewRole ? DEMO_PERSONAS[previewRole] : null;
     return {
       id: db.profile.id,
-      email: persona.email ?? "demo@sardaritbd.com",
-      name: persona.name ?? db.profile.full_name,
-      // Sync the profile with the previewed persona so UI that reads
-      // profile.full_name / profile.role (e.g. Settings) never shows a
-      // different person than the one selected in the role switcher.
+      email: sessionUser.email ?? "demo@sardaritbd.com",
+      name: persona ? persona.name : sessionUser.name,
       profile: {
         ...db.profile,
-        full_name: persona.name ?? db.profile.full_name,
-        role: persona.role,
+        full_name: persona ? persona.name : sessionUser.name,
+        role,
       },
       isDemo: true,
-      role: persona.role,
+      role,
+      realRole: sessionUser.role,
       teamMembers: db.team_members,
     };
   }
@@ -115,17 +138,26 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     .from("team_members")
     .select("*")
     .eq("user_id", user.id);
+  // Deactivated employees are logged out immediately (agency-managed auth).
+  if (profile && (profile as Profile).is_active === false) return null;
   const teamMembers = (team ?? []) as TeamMember[];
   const me = teamMembers.find(
     (t) => t.email?.toLowerCase() === user.email?.toLowerCase() && t.is_active,
   );
+  // Prefer the agency-assigned profiles.role (set by Settings -> Team access);
+  // fall back to the team_members join for legacy rows, then "ceo".
+  const profileRole = (profile as Profile | null)?.role;
+  const role: TeamRole = isTeamRole(profileRole)
+    ? profileRole
+    : (me?.role ?? "ceo");
   return {
     id: user.id,
     email: user.email ?? null,
     name: user.user_metadata?.full_name ?? null,
     profile: (profile as Profile) ?? null,
     isDemo: false,
-    role: me?.role ?? "ceo",
+    role,
+    realRole: role,
     teamMembers,
   };
 }
@@ -137,12 +169,237 @@ export async function requireUser(): Promise<CurrentUser> {
 }
 
 // ---------------------------------------------------------------------------
+// Username + password auth (no public self-registration; agency provisions)
+// ---------------------------------------------------------------------------
+export async function loginWithUsername(
+  username: string,
+  password: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const name = username.trim();
+  if (!name || !password) return { ok: false, error: "Username and password are required" };
+  if (isDemoMode()) {
+    const user = demo.findUserByUsername(name);
+    if (!user || !user.is_active) return { ok: false, error: "Unknown username" };
+    if (!user.password_hash || !verifyPassword(password, user.password_hash)) {
+      return { ok: false, error: "Incorrect password" };
+    }
+    return { ok: true };
+  }
+  // Resolve username -> auth email. Login is unauthenticated, so the lookup
+  // must use the service-role admin client (profiles RLS would block it).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    return { ok: false, error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
+  }
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id, email, is_active")
+    .eq("username", name)
+    .maybeSingle();
+  if (!profile || !profile.email) return { ok: false, error: "Unknown username" };
+  if (profile.is_active === false) {
+    return { ok: false, error: "This account has been deactivated by agency management" };
+  }
+  const client = await sb();
+  if (!client) return { ok: false, error: "Authentication is not configured" };
+  const { error } = await client.auth.signInWithPassword({
+    email: profile.email,
+    password,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: error.message === "Invalid login credentials" ? "Incorrect password" : error.message,
+    };
+  }
+  return { ok: true };
+}
+
+// Agency-only user management. `actor` must be the workspace owner/CEO.
+// Uses the real session role so the demo "Preview as" persona can never
+// escalate into account provisioning.
+export async function requireAgency(user: CurrentUser): Promise<void> {
+  if ((user.realRole ?? user.role) !== "ceo") {
+    throw new Error("Only agency management can provision user accounts");
+  }
+}
+
+export async function fetchUsers(userId: string): Promise<AppUser[]> {
+  if (isDemoMode()) return demo.getUsers();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return [];
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const [authRes, profilesRes] = await Promise.all([
+    admin.auth.admin.listUsers({ perPage: 1000 }),
+    admin.from("profiles").select("id, username, email, role, full_name, is_active, created_at, updated_at"),
+  ]);
+  const profiles = (profilesRes.data ?? []) as Array<Record<string, unknown>>;
+  const byId = new Map(profiles.map((p) => [String(p.id), p]));
+  return (authRes.data?.users ?? [])
+    .map((u) => {
+      const p = byId.get(u.id) as Record<string, unknown> | undefined;
+      return {
+        id: u.id,
+        username: String(p?.username ?? u.email?.split("@")[0] ?? u.id),
+        password_hash: null,
+        name: String(p?.full_name ?? u.user_metadata?.full_name ?? p?.username ?? u.email ?? u.id),
+        email: u.email ?? null,
+        role: (p?.role as TeamRole) ?? "executive",
+        is_active: !(u as { banned_at?: unknown }).banned_at && p?.is_active !== false,
+        created_at: u.created_at ?? "",
+        updated_at: p?.updated_at ? String(p.updated_at) : u.created_at ?? "",
+      };
+    })
+    .sort((a, b) => a.username.localeCompare(b.username));
+}
+
+export async function createUserAccount(
+  actor: CurrentUser,
+  input: { username: string; password: string; name: string; email?: string; role: TeamRole },
+): Promise<AppUser> {
+  await requireAgency(actor);
+  const username = input.username.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    throw new Error("Username must be 3-32 chars: letters, numbers, dots, dashes, underscores");
+  }
+  if (!input.password || input.password.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+  if (isDemoMode()) {
+    if (demo.findUserByUsername(username)) throw new Error("Username already exists");
+    return demo.createDemoUser({
+      username,
+      password: input.password,
+      name: input.name.trim(),
+      email: input.email || null,
+      role: input.role,
+    });
+  }
+  // Supabase: create the auth user (service role) then the profile row.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured");
+  }
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: created, error } = await admin.auth.admin.createUser({
+    email: input.email?.trim() || `${username}@sardarcrm.internal`,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { full_name: input.name.trim() },
+  });
+  if (error) throw new Error(error.message);
+  if (!created?.user) throw new Error("Failed to create user");
+  const { error: profileError } = await admin.from("profiles").insert({
+    id: created.user.id,
+    username,
+    full_name: input.name.trim(),
+    role: input.role,
+    currency: "USD",
+    default_fee_percent: 20,
+  });
+  if (profileError) throw new Error(profileError.message);
+  return {
+    id: created.user.id,
+    username,
+    password_hash: null,
+    name: input.name.trim(),
+    email: input.email?.trim() || null,
+    role: input.role,
+    is_active: true,
+    created_at: created.user.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function updateUserAccount(
+  actor: CurrentUser,
+  username: string,
+  patch: { password?: string; is_active?: boolean; role?: TeamRole },
+): Promise<AppUser | null> {
+  await requireAgency(actor);
+  if (patch.password && patch.password.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+  const demotesCeo = patch.is_active === false || (!!patch.role && patch.role !== "ceo");
+  if (isDemoMode()) {
+    if (demotesCeo) {
+      const target = demo.findUserByUsername(username);
+      if (target?.role === "ceo" && target.is_active) {
+        const activeCeos = demo.getUsers().filter((u) => u.role === "ceo" && u.is_active);
+        if (activeCeos.length <= 1) {
+          throw new Error("Cannot deactivate or demote the last CEO");
+        }
+      }
+    }
+    return demo.updateDemoUser(username, patch);
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured");
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: target } = await admin
+    .from("profiles")
+    .select("id, email, role, is_active")
+    .eq("username", username)
+    .maybeSingle();
+  if (!target) return null;
+  if (demotesCeo && target.role === "ceo" && target.is_active !== false) {
+    const { data: ceos } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "ceo")
+      .eq("is_active", true);
+    if ((ceos?.length ?? 0) <= 1) {
+      throw new Error("Cannot deactivate or demote the last CEO");
+    }
+  }
+  if (patch.password) {
+    const { error } = await admin.auth.admin.updateUserById(target.id as string, {
+      password: patch.password,
+    });
+    if (error) throw new Error(error.message);
+  }
+  const profilePatch: Record<string, unknown> = {};
+  if (patch.role) profilePatch.role = patch.role;
+  if (patch.is_active !== undefined) profilePatch.is_active = patch.is_active;
+  if (Object.keys(profilePatch).length) {
+    const { error } = await admin.from("profiles").update(profilePatch).eq("id", target.id);
+    if (error) throw new Error(error.message);
+  }
+  return {
+    id: String(target.id),
+    username,
+    password_hash: null,
+    name: username,
+    email: (target.email as string | null) ?? null,
+    role: patch.role ?? "executive",
+    is_active: patch.is_active ?? true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Demo persona (role switcher)
 // In demo mode the signed-in workspace owner can preview the app as a
 // specific team member role (CEO vs Executive) via a cookie.
 // ---------------------------------------------------------------------------
-export async function getDemoRole(): Promise<TeamRole> {
-  if (!isDemoMode()) return "ceo";
+// Demo preview persona. Returns null when no preview cookie is set so the
+// signed-in user's own role always wins unless they explicitly switch.
+export async function getDemoRole(): Promise<TeamRole | null> {
+  if (!isDemoMode()) return null;
   try {
     const { cookies } = await import("next/headers");
     const store = await cookies();
@@ -151,7 +408,7 @@ export async function getDemoRole(): Promise<TeamRole> {
   } catch {
     // cookies() unavailable (e.g. client context) -> default
   }
-  return "ceo";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
