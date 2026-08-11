@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as data from "@/lib/data";
 import type { OpportunityInput, ProjectInput } from "@/lib/data";
+import { CURRENCY_SYMBOL } from "@/lib/constants";
 import type {
   Account,
   AutomationRule,
@@ -15,14 +16,23 @@ import type {
   MilestoneStatus,
   Opportunity,
   OpportunityStage,
+  Profile,
   Project,
   ProjectCredential,
   ProjectTeamMember,
   ProjectTodo,
   TeamRole,
+  TimeEntry,
 } from "@/lib/types";
 import { resetDemo, demoDbPath } from "@/lib/db/demo-store";
 import { generateProposal, type ProposalTone } from "@/lib/proposal";
+import {
+  checkRateLimit,
+  clearFailures,
+  recordFailure,
+  MAX_IP_FAILURES,
+  MAX_USERNAME_FAILURES,
+} from "@/lib/rate-limit";
 
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
@@ -308,6 +318,77 @@ export async function deleteProjectTodoAction(projectId: string, id: string): Pr
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to delete todo" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Time tracking (timesheet rows per project)
+// ---------------------------------------------------------------------------
+export async function addTimeEntryAction(
+  projectId: string,
+  input: {
+    date: string;
+    hours: number;
+    description?: string | null;
+    assignee?: string | null;
+    billable?: boolean;
+  },
+): Promise<ActionResult<TimeEntry>> {
+  try {
+    const user = await data.requireUser();
+    const hours = Number(input.hours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+      return { ok: false, error: "Hours must be between 0 and 24" };
+    }
+    if (!input.date) return { ok: false, error: "A date is required" };
+    const entry = await data.createTimeEntry(user.id, projectId, {
+      ...input,
+      hours: Math.round(hours * 100) / 100,
+    });
+    if (!entry) return { ok: false, error: "Failed to log time" };
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    revalidatePath("/calendar");
+    return { ok: true, data: entry };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to log time" };
+  }
+}
+
+export async function updateTimeEntryAction(
+  projectId: string,
+  id: string,
+  patch: Partial<Pick<TimeEntry, "date" | "hours" | "description" | "assignee" | "billable">>,
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    if (patch.hours !== undefined) {
+      const hours = Number(patch.hours);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+        return { ok: false, error: "Hours must be between 0 and 24" };
+      }
+      patch.hours = Math.round(hours * 100) / 100;
+    }
+    await data.updateTimeEntry(user.id, id, patch as Partial<TimeEntry>);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    revalidatePath("/calendar");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update time entry" };
+  }
+}
+
+export async function deleteTimeEntryAction(projectId: string, id: string): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.deleteTimeEntry(user.id, id);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    revalidatePath("/calendar");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete time entry" };
   }
 }
 
@@ -629,14 +710,54 @@ export async function loginAction(
   password: string,
 ): Promise<ActionResult> {
   try {
+    // Never count empty submissions toward the rate limit.
+    if (!username.trim() || !password) {
+      return { ok: false, error: "Username and password are required" };
+    }
+    // Brute-force protection: a sliding window of failed attempts per
+    // IP+username and per IP (see src/lib/rate-limit.ts).
+    const { headers } = await import("next/headers");
+    const headerStore = await headers();
+    // Trusted proxies append the real client IP to X-Forwarded-For, so the
+    // rightmost entry is the least spoofable when deployed behind one. In
+    // dev (no proxy) it falls back to x-real-ip / "unknown".
+    const xff = headerStore.get("x-forwarded-for");
+    const forwarded = xff
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .at(-1);
+    const ip = forwarded || headerStore.get("x-real-ip") || "unknown";
+    const usernameKey = `login:${ip}:${username.trim().toLowerCase()}`;
+    const ipKey = `ip:${ip}`;
+
+    const perUser = checkRateLimit(usernameKey, MAX_USERNAME_FAILURES);
+    if (!perUser.allowed) {
+      return {
+        ok: false,
+        error: `Too many failed attempts for this account. Try again in ${Math.max(1, Math.ceil(perUser.retryAfterSec / 60))} min.`,
+      };
+    }
+    const perIp = checkRateLimit(ipKey, MAX_IP_FAILURES);
+    if (!perIp.allowed) {
+      return {
+        ok: false,
+        error: "Too many failed attempts from this address. Try again later.",
+      };
+    }
+
     const result = await data.loginWithUsername(username, password);
-    if (!result.ok) return { ok: false, error: result.error ?? "Login failed" };
+    if (!result.ok) {
+      recordFailure(usernameKey);
+      recordFailure(ipKey);
+      return { ok: false, error: result.error ?? "Login failed" };
+    }
+    // A legitimate owner getting back in resets their per-account streak.
+    clearFailures(usernameKey);
+
     if (data.isDemoModeSafe()) {
       const { cookies } = await import("next/headers");
       const store = await cookies();
-      // Start every session on the user's own role: clear any preview persona
-      // cookie left behind by a previous login.
-      store.delete("sardar_demo_role");
       store.set(data.DEMO_SESSION_COOKIE, username.trim(), {
         path: "/",
         httpOnly: true,
@@ -656,9 +777,6 @@ export async function signOutAction(): Promise<ActionResult> {
       const { cookies } = await import("next/headers");
       const store = await cookies();
       store.delete(data.DEMO_SESSION_COOKIE);
-      // A leftover demo preview persona must never bleed into the next user's
-      // session.
-      store.delete("sardar_demo_role");
       return { ok: true };
     }
     const { createServerSupabase } = await import("@/lib/supabase/server");
@@ -670,6 +788,63 @@ export async function signOutAction(): Promise<ActionResult> {
     return { ok: true };
   } catch {
     return { ok: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Profile (name, avatar, currency, default fee)
+// ---------------------------------------------------------------------------
+export async function updateProfileAction(patch: {
+  full_name?: string | null;
+  currency?: string | null;
+  default_fee_percent?: number | null;
+  avatar_url?: string | null;
+}): Promise<ActionResult<Profile>> {
+  try {
+    const user = await data.requireUser();
+    const clean: Partial<Profile> = {};
+
+    if (patch.full_name !== undefined) {
+      const name = (patch.full_name ?? "").trim();
+      if (name.length > 60) return { ok: false, error: "Name must be 60 characters or fewer" };
+      clean.full_name = name || null;
+    }
+    if (patch.currency !== undefined) {
+      const currency = (patch.currency ?? "USD").toUpperCase();
+      if (!(currency in CURRENCY_SYMBOL)) {
+        return { ok: false, error: `Unsupported currency "${currency}"` };
+      }
+      clean.currency = currency;
+    }
+    if (patch.default_fee_percent !== undefined) {
+      const fee = patch.default_fee_percent ?? 20;
+      if (!Number.isFinite(fee) || fee < 0 || fee > 100) {
+        return { ok: false, error: "Default fee must be between 0 and 100" };
+      }
+      clean.default_fee_percent = fee;
+    }
+    if (patch.avatar_url !== undefined) {
+      const avatar = patch.avatar_url;
+      if (avatar !== null) {
+        // Avatars are client-resized JPEG data URLs; accept only that exact
+        // form (defense in depth against arbitrary data:image/* blobs).
+        if (!avatar.startsWith("data:image/jpeg;base64,")) {
+          return { ok: false, error: "Invalid image data" };
+        }
+        if (avatar.length > 1_500_000) {
+          return { ok: false, error: "Image is too large — please use a smaller photo" };
+        }
+      }
+      clean.avatar_url = avatar;
+    }
+
+    const profile = await data.updateProfile(user.id, clean);
+    if (!profile) return { ok: false, error: "Failed to update profile" };
+    revalidatePath("/settings");
+    revalidatePath("/dashboard");
+    return { ok: true, data: profile };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update profile" };
   }
 }
 

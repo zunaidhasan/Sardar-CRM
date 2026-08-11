@@ -18,7 +18,7 @@ import {
 import { ClientDialog } from "@/components/clients/client-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,7 +44,17 @@ export interface ClientProfileData extends Client {
   attachments: Attachment[];
 }
 
-export function ClientProfile({ client, currency }: { client: ClientProfileData; currency: string }) {
+export function ClientProfile({
+  client,
+  currency,
+  userName,
+  avatarUrl,
+}: {
+  client: ClientProfileData;
+  currency: string;
+  userName?: string | null;
+  avatarUrl?: string | null;
+}) {
   const [editing, setEditing] = React.useState(false);
   const [note, setNote] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
@@ -227,6 +237,16 @@ export function ClientProfile({ client, currency }: { client: ClientProfileData;
                 <div className="space-y-1">
                   {client.activities.map((a) => (
                     <div key={a.id} className="flex items-start gap-3 rounded-lg p-2 hover:bg-accent/50">
+                      {/* RLS scopes the history to the viewer's own activities,
+                          so the signed-in user's avatar is the correct face. */}
+                      <Avatar className="mt-0.5 h-7 w-7 shrink-0">
+                        {avatarUrl && (
+                          <AvatarImage src={avatarUrl} alt={userName ?? "User"} />
+                        )}
+                        <AvatarFallback className="text-[10px]">
+                          {initials(userName)}
+                        </AvatarFallback>
+                      </Avatar>
                       <Badge variant="outline" className="mt-0.5 shrink-0">
                         {ACTIVITY_TYPE_LABELS[a.activity_type] ?? a.activity_type}
                       </Badge>
@@ -234,7 +254,9 @@ export function ClientProfile({ client, currency }: { client: ClientProfileData;
                         <p className="text-sm font-medium">{a.subject}</p>
                         {a.body && <p className="text-sm text-muted-foreground">{a.body}</p>}
                       </div>
-                      <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(a.created_at)}</span>
+                      <span suppressHydrationWarning className="shrink-0 text-xs text-muted-foreground">
+                        {timeAgo(a.created_at)}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -14,9 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { useI18n } from "@/components/i18n-provider";
 import { PlatformBadge, StageBadge, ProjectStatusBadge } from "@/components/status-badges";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { STAGE_META, PROJECT_STATUS_META } from "@/lib/constants";
 import { formatCurrency, formatShortDate } from "@/lib/utils";
+import type { ActivityFeedItem } from "@/lib/activity-feed";
 import type { Opportunity, Project, FollowUp } from "@/lib/types";
 
 const REVENUE_STATUSES = ["complete", "delivered"];
@@ -24,19 +27,24 @@ const PIPELINE_STAGES = ["lead", "proposal", "negotiation", "active"];
 
 interface ExecutiveDashboardProps {
   userName: string;
+  avatarUrl?: string | null;
   currency: string;
   opportunities: Opportunity[];
   projects: Project[];
   followUps: FollowUp[];
+  activities: ActivityFeedItem[];
 }
 
 export function ExecutiveDashboard({
   userName,
+  avatarUrl,
   currency,
   opportunities,
   projects,
   followUps,
+  activities,
 }: ExecutiveDashboardProps) {
+  const { t } = useI18n();
   // Everything is scoped to deals/projects assigned to this executive.
   const mine = (o: Opportunity) => o.assigned_to === userName;
   const myProjects = (p: Project) => p.assigned_to === userName;
@@ -72,18 +80,19 @@ export function ExecutiveDashboard({
     <div className="space-y-6">
       <PageHeader
         eyebrow="My workspace"
-        title={`Welcome back, ${firstName}`}
+        title={`${t("Welcome back")}, ${firstName}`}
         description="Deals, projects, and follow-ups assigned to you."
+        avatar={{ src: avatarUrl, name: userName }}
         actions={
           <>
             <Button asChild variant="outline">
               <Link href="/pipeline?new=1">
-                <Plus /> Add deal
+                <Plus /> {t("Add deal")}
               </Link>
             </Button>
             <Button asChild>
               <Link href="/pipeline">
-                <Target /> View pipeline
+                <Target /> {t("View pipeline")}
               </Link>
             </Button>
           </>
@@ -93,42 +102,42 @@ export function ExecutiveDashboard({
       {/* Personal KPI cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="My Pipeline"
+          label={t("My Pipeline")}
           value={formatCurrency(myPipeline, currency)}
           sub={`${myOpenDeals.length} open deals`}
           icon={CircleDollarSign}
         />
         <StatCard
-          label="Active Projects"
+          label={t("Active Projects")}
           value={`${myActiveProjects.length}`}
           sub="In progress or in review"
           icon={FolderKanban}
         />
         <StatCard
-          label="My Revenue"
+          label={t("My Revenue")}
           value={formatCurrency(myRevenue, currency)}
           sub="Net after fees + bonuses"
           icon={Target}
         />
         <StatCard
-          label="My Win Rate"
+          label={t("My Win Rate")}
           value={`${myWinRate}%`}
           sub={`${myWon} won of ${decided.length} decided`}
           icon={GitPullRequestArrow}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* My deals */}
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>My deals</CardTitle>
+              <CardTitle>{t("My deals")}</CardTitle>
               <CardDescription>Active opportunities you own</CardDescription>
             </div>
             <Button asChild size="sm" variant="ghost">
               <Link href="/pipeline">
-                View all <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                {t("View all")} <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardHeader>
@@ -161,12 +170,12 @@ export function ExecutiveDashboard({
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>My projects</CardTitle>
+              <CardTitle>{t("My projects")}</CardTitle>
               <CardDescription>Delivery work you are handling</CardDescription>
             </div>
             <Button asChild size="sm" variant="ghost">
               <Link href="/projects">
-                View all <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                {t("View all")} <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardHeader>
@@ -191,13 +200,16 @@ export function ExecutiveDashboard({
             ))}
           </CardContent>
         </Card>
+
+        {/* Recent activity feed */}
+        <ActivityFeed items={activities} avatarUrl={avatarUrl} userName={userName} limit={6} />
       </div>
 
       {/* My follow-ups */}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Upcoming follow-ups</CardTitle>
+            <CardTitle>{t("Upcoming follow-ups")}</CardTitle>
             <CardDescription>Deals that need your attention</CardDescription>
           </div>
         </CardHeader>

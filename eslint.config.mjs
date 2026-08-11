@@ -20,6 +20,16 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    // `_`-prefixed params mark intentionally-unused arguments (e.g. shared
+    // getters that must accept a userId for API symmetry).
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

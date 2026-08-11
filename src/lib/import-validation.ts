@@ -1,11 +1,3 @@
-import type {
-  BidStatus,
-  OpportunityStage,
-  OpportunityType,
-  Platform,
-  Priority,
-  ProjectStatus,
-} from "./types";
 import {
   BID_STATUS_META,
   KANBAN_STAGES,

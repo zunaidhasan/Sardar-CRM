@@ -97,7 +97,10 @@ export function KanbanCard({ opportunity: opp, onEdit, onDelete }: KanbanCardPro
             </span>
           )}
           {followUp && (
+            // suppressHydrationWarning: the urgent flag derives from Date.now()
+            // and can differ between server render and client hydration.
             <span
+              suppressHydrationWarning
               className={cn(
                 "text-[11px]",
                 followUp.urgent ? "font-medium text-rose-500" : "text-muted-foreground",

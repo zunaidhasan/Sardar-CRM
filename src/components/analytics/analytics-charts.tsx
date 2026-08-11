@@ -28,6 +28,22 @@ export interface AnalyticsSeries {
 
 const PIE_COLORS = ["#14a800", "#1dbf73", "#8b5cf6", "#f59e0b", "#64748b", "#ec4899"];
 
+// Theme-aware chart chrome (axes, grid, tooltips) — driven by the app's CSS
+// variables so charts look right in both light and dark mode without reloading.
+const AXIS_TICK = { fill: "var(--muted-foreground)", fontSize: 12 };
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
+  boxShadow: "0 6px 20px rgb(0 0 0 / 0.15)",
+  color: "var(--popover-foreground)",
+  fontSize: 12,
+};
+
+const TOOLTIP_ITEM = { color: "var(--popover-foreground)" };
+const TOOLTIP_LABEL = { color: "var(--popover-foreground)", fontWeight: 600 };
+
 function money(symbol: string, v: number) {
   return `${symbol}${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`;
 }
@@ -56,7 +72,12 @@ export function AnalyticsCharts({ data }: { data: AnalyticsSeries }) {
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => money(data.currencySymbol, Number(v))} />
+              <Tooltip
+                formatter={(v) => money(data.currencySymbol, Number(v))}
+                contentStyle={TOOLTIP_STYLE}
+                itemStyle={TOOLTIP_ITEM}
+                labelStyle={TOOLTIP_LABEL}
+              />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -71,9 +92,15 @@ export function AnalyticsCharts({ data }: { data: AnalyticsSeries }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.revenueTrend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v) => money(data.currencySymbol, v)} />
-              <Tooltip formatter={(v) => money(data.currencySymbol, Number(v))} />
+              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} tick={AXIS_TICK} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={12} tick={AXIS_TICK} tickFormatter={(v) => money(data.currencySymbol, v)} />
+              <Tooltip
+                formatter={(v) => money(data.currencySymbol, Number(v))}
+                contentStyle={TOOLTIP_STYLE}
+                itemStyle={TOOLTIP_ITEM}
+                labelStyle={TOOLTIP_LABEL}
+                cursor={{ stroke: "var(--border)", strokeDasharray: "4 4" }}
+              />
               <Line type="monotone" dataKey="revenue" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -89,9 +116,15 @@ export function AnalyticsCharts({ data }: { data: AnalyticsSeries }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.winRateOverTime} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} unit="%" />
-              <Tooltip formatter={(v) => `${v}%`} />
+              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} tick={AXIS_TICK} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={12} unit="%" tick={AXIS_TICK} />
+              <Tooltip
+                formatter={(v) => `${v}%`}
+                contentStyle={TOOLTIP_STYLE}
+                itemStyle={TOOLTIP_ITEM}
+                labelStyle={TOOLTIP_LABEL}
+                cursor={{ fill: "var(--muted)" }}
+              />
               <Bar dataKey="winRate" name="Win rate" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -107,9 +140,15 @@ export function AnalyticsCharts({ data }: { data: AnalyticsSeries }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.pipelineDistribution} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v) => money(data.currencySymbol, v)} />
-              <Tooltip formatter={(v) => money(data.currencySymbol, Number(v))} />
+              <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={12} tick={AXIS_TICK} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={12} tick={AXIS_TICK} tickFormatter={(v) => money(data.currencySymbol, v)} />
+              <Tooltip
+                formatter={(v) => money(data.currencySymbol, Number(v))}
+                contentStyle={TOOLTIP_STYLE}
+                itemStyle={TOOLTIP_ITEM}
+                labelStyle={TOOLTIP_LABEL}
+                cursor={{ fill: "var(--muted)" }}
+              />
               <Bar dataKey="value" name="Value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

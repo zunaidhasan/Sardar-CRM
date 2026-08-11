@@ -15,9 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { useI18n } from "@/components/i18n-provider";
 import { formatCurrency, initials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import type { ActivityFeedItem } from "@/lib/activity-feed";
 import type { Opportunity, Project, Invoice, TeamMember } from "@/lib/types";
 
 const REVENUE_STATUSES = ["complete", "delivered"];
@@ -25,21 +28,26 @@ const PIPELINE_STAGES = ["lead", "proposal", "negotiation", "active"];
 
 interface CeoDashboardProps {
   userName: string;
+  avatarUrl?: string | null;
   currency: string;
   opportunities: Opportunity[];
   projects: Project[];
   invoices: Invoice[];
   teamMembers: TeamMember[];
+  activities: ActivityFeedItem[];
 }
 
 export function CeoDashboard({
   userName,
+  avatarUrl,
   currency,
   opportunities,
   projects,
   invoices,
   teamMembers,
+  activities,
 }: CeoDashboardProps) {
+  const { t } = useI18n();
   const revenue = projects
     .filter((p) => REVENUE_STATUSES.includes(p.status))
     .reduce((sum, p) => sum + p.net_amount + p.bonus, 0);
@@ -93,18 +101,19 @@ export function CeoDashboard({
     <div className="space-y-6">
       <PageHeader
         eyebrow="Company overview"
-        title={`Welcome back, ${userName.split(" ")[0] ?? "there"}`}
+        title={`${t("Welcome back")}, ${userName.split(" ")[0] ?? "there"}`}
         description="Agency-wide view of revenue, pipeline, and team performance across Fiverr & Upwork."
+        avatar={{ src: avatarUrl, name: userName }}
         actions={
           <>
             <Button asChild variant="outline">
               <Link href="/proposals">
-                <Plus /> AI Proposal
+                <Plus /> {t("AI Proposal")}
               </Link>
             </Button>
             <Button asChild>
               <Link href="/pipeline?new=1">
-                <Plus /> Add deal
+                <Plus /> {t("Add deal")}
               </Link>
             </Button>
           </>
@@ -114,25 +123,25 @@ export function CeoDashboard({
       {/* Company KPI cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total Revenue"
+          label={t("Total Revenue")}
           value={formatCurrency(revenue, currency)}
           sub="Net after platform fees + bonuses"
           icon={CircleDollarSign}
         />
         <StatCard
-          label="Active Pipeline"
+          label={t("Active Pipeline")}
           value={formatCurrency(pipelineValue, currency)}
           sub="Quoted value in open stages"
           icon={Target}
         />
         <StatCard
-          label="Pending Invoices"
+          label={t("Pending Invoices")}
           value={`${pendingInvoices.length}`}
           sub={formatCurrency(pendingInvoiceAmount, currency) + " outstanding"}
           icon={PieChart}
         />
         <StatCard
-          label="Win Rate"
+          label={t("Win Rate")}
           value={`${winRate}%`}
           sub={`${won} won of ${decided.length} decided`}
           icon={GitPullRequestArrow}
@@ -144,7 +153,7 @@ export function CeoDashboard({
         <Card className="xl:col-span-2">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>Team performance</CardTitle>
+              <CardTitle>{t("Team performance")}</CardTitle>
               <CardDescription>Deals and delivery by team member</CardDescription>
             </div>
           </CardHeader>
@@ -203,21 +212,24 @@ export function CeoDashboard({
         </Card>
 
         <div className="space-y-6">
+          {/* Recent activity feed */}
+          <ActivityFeed items={activities} avatarUrl={avatarUrl} userName={userName} />
+
           {/* Quick actions */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick actions</CardTitle>
+              <CardTitle>{t("Quick actions")}</CardTitle>
               <CardDescription>Common tasks, one click away</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-2">
               <QuickAction href="/pipeline?new=1" icon={Plus}>
-                Add a deal / bid
+                {t("Add a deal / bid")}
               </QuickAction>
               <QuickAction href="/projects?new=1" icon={FolderKanban}>
-                New project / order
+                {t("New project / order")}
               </QuickAction>
               <QuickAction href="/clients?new=1" icon={UserRound}>
-                Add client
+                {t("Add client")}
               </QuickAction>
             </CardContent>
           </Card>

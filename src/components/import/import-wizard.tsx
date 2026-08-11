@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { FileSpreadsheet, FileUp, Loader2, Table2 } from "lucide-react";
 import { importRowsAction } from "@/app/actions";
@@ -139,34 +138,38 @@ export function ImportWizard({ importRuns }: { importRuns: Array<{ id: string; e
   const [sheet, setSheet] = React.useState<ParsedSheet | null>(null);
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
   const [importing, setImporting] = React.useState(false);
+  const [parsing, setParsing] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const def = FIELD_DEFS[entityType];
   const missingRequired = def.required.some((f) => !mapping[f]);
 
-  function handleFile(file: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        // cellDates: true so Excel date-formatted cells arrive as Date objects
-        // instead of raw serial numbers; server-side validation still handles
-        // text dates and serials from other sources.
-        const workbook = XLSX.read(data, { type: "array", cellDates: true });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]!];
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
-        if (!json.length) {
-          toast.error("No rows found in the first sheet");
-          return;
-        }
-        const headers = Object.keys(json[0]!);
-        setSheet({ fileName: file.name, headers, rows: json });
-        setMapping(autoMap(headers, def.fields));
-      } catch {
-        toast.error("Could not parse that file. Try a .csv or .xlsx export.");
+  async function handleFile(file: File) {
+    if (parsing) return;
+    setParsing(true);
+    try {
+      // Load the (large) spreadsheet parser on demand so it isn't part of the
+      // initial page bundle — it is only needed once a file is chosen.
+      const XLSX = await import("xlsx");
+      const data = new Uint8Array(await file.arrayBuffer());
+      // cellDates: true so Excel date-formatted cells arrive as Date objects
+      // instead of raw serial numbers; server-side validation still handles
+      // text dates and serials from other sources.
+      const workbook = XLSX.read(data, { type: "array", cellDates: true });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]!];
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+      if (!json.length) {
+        toast.error("No rows found in the first sheet");
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+      const headers = Object.keys(json[0]!);
+      setSheet({ fileName: file.name, headers, rows: json });
+      setMapping(autoMap(headers, def.fields));
+    } catch {
+      toast.error("Could not parse that file. Try a .csv or .xlsx export.");
+    } finally {
+      setParsing(false);
+    }
   }
 
   function reset() {
@@ -242,14 +245,20 @@ export function ImportWizard({ importRuns }: { importRuns: Array<{ id: string; e
                 type="file"
                 accept=".xlsx,.xls,.csv"
                 className="hidden"
+                disabled={parsing}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) handleFile(f);
                 }}
               />
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" disabled={parsing}>
                 <span>
-                  <FileSpreadsheet /> Choose file
+                  {parsing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet />
+                  )}
+                  {parsing ? "Parsing…" : "Choose file"}
                 </span>
               </Button>
             </label>

@@ -5,6 +5,10 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
+// Shared so the pre-paint script in app/layout.tsx and the provider always
+// read the same localStorage key (keeps the no-flash guarantee intact).
+export const THEME_STORAGE_KEY = "ff-theme";
+
 interface ThemeProviderProps {
   children: React.ReactNode;
   defaultTheme?: Theme;
@@ -30,10 +34,18 @@ function applyTheme(theme: Theme) {
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "ff-theme",
+  storageKey = THEME_STORAGE_KEY,
 }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(defaultTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  // Seed from the DOM so the first paint (after the pre-paint script) matches
+  // what the toggle icon shows — avoids a sun/moon flicker on load.
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() =>
+    typeof document === "undefined"
+      ? "light"
+      : document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light",
+  );
 
   useEffect(() => {
     const stored = localStorage.getItem(storageKey) as Theme | null;

@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CalendarDays,
   ClipboardList,
   FileUp,
   FileText,
@@ -26,6 +27,7 @@ export const NAV_MAIN: NavItem[] = [
   { title: "Invoices", href: "/invoices", icon: FileText },
   { title: "Proposals (AI)", href: "/proposals", icon: Sparkles },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Calendar", href: "/calendar", icon: CalendarDays },
 ];
 
 export const NAV_SECONDARY: NavItem[] = [

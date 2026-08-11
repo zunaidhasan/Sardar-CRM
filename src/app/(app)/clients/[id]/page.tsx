@@ -17,5 +17,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   const data: ClientProfileData = { ...client, attachments };
 
-  return <ClientProfile client={data} currency={user.profile?.currency ?? "USD"} />;
+  return (
+    <ClientProfile
+      client={data}
+      currency={user.profile?.currency ?? "USD"}
+      userName={user.name ?? user.profile?.full_name ?? "User"}
+      avatarUrl={user.profile?.avatar_url || null}
+    />
+  );
 }

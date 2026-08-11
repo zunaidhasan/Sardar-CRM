@@ -1,13 +1,17 @@
 "use client";
 
 import { Toaster as Sonner } from "sonner";
+import { useTheme } from "@/components/theme-provider";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  // Follow the app's resolved theme (not the OS) so toasts always match the
+  // surface behind them, even after a manual light/dark toggle.
+  const { resolvedTheme } = useTheme();
   return (
     <Sonner
-      theme="system"
+      theme={resolvedTheme}
       className="toaster group"
       toastOptions={{
         classNames: {

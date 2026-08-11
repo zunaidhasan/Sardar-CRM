@@ -31,6 +31,7 @@ import type { Client, Project } from "@/lib/types";
 interface ProjectsListProps {
   projects: Project[];
   clients: Client[];
+  hoursByProject?: Map<string, number>;
   defaultFeePercent: number;
   currency: string;
 }
@@ -40,7 +41,7 @@ function monthKey(date: string | null): string {
   return date.slice(0, 7); // YYYY-MM
 }
 
-export function ProjectsList({ projects, clients, defaultFeePercent, currency }: ProjectsListProps) {
+export function ProjectsList({ projects, clients, hoursByProject, defaultFeePercent, currency }: ProjectsListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = React.useState("");
@@ -129,13 +130,14 @@ export function ProjectsList({ projects, clients, defaultFeePercent, currency }:
               <TableHead className="hidden xl:table-cell">Deadline</TableHead>
               <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead>Progress</TableHead>
+              <TableHead className="hidden md:table-cell text-right">Hours</TableHead>
               <TableHead className="text-right">Net</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                   No orders match your filters.
                 </TableCell>
               </TableRow>
@@ -159,7 +161,12 @@ export function ProjectsList({ projects, clients, defaultFeePercent, currency }:
                     {p.project_type ?? "—"}
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">
-                    <span className={cn("text-xs", cd.urgent && "font-medium text-rose-500")}>
+                    {/* suppressHydrationWarning: cd.label derives from Date.now()
+                        and can flip between server render and client hydration. */}
+                    <span
+                      suppressHydrationWarning
+                      className={cn("text-xs", cd.urgent && "font-medium text-rose-500")}
+                    >
                       {formatDate(p.delivery_deadline)} · {cd.label}
                     </span>
                   </TableCell>
@@ -171,6 +178,11 @@ export function ProjectsList({ projects, clients, defaultFeePercent, currency }:
                       <Progress value={p.progress} className="h-1.5 w-12" />
                       <span className="text-xs text-muted-foreground">{p.progress}%</span>
                     </div>
+                  </TableCell>
+                  <TableCell className="hidden text-right text-xs text-muted-foreground md:table-cell">
+                    {hoursByProject?.get(p.id)
+                      ? `${Math.round((hoursByProject.get(p.id) ?? 0) * 100) / 100}h`
+                      : "—"}
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatCurrency(p.net_amount + p.bonus, currency)}

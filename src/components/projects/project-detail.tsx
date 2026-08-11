@@ -8,6 +8,7 @@ import {
   Calendar,
   CheckCircle2,
   Circle,
+  Clock,
   Loader2,
   Plus,
   Trash2,
@@ -25,6 +26,7 @@ import { ProjectStatusBadge } from "@/components/status-badges";
 import { ProjectTodos } from "@/components/projects/project-todos";
 import { ProjectCredentials } from "@/components/projects/project-credentials";
 import { ProjectTeam } from "@/components/projects/project-team";
+import { TimeTracking } from "@/components/projects/time-tracking";
 import {
   Select,
   SelectContent,
@@ -50,6 +52,7 @@ import type {
   ProjectTeamMember,
   ProjectTodo,
   TeamMember,
+  TimeEntry,
 } from "@/lib/types";
 
 export interface ProjectDetailData extends Project {
@@ -57,6 +60,7 @@ export interface ProjectDetailData extends Project {
   todos: ProjectTodo[];
   credentials: ProjectCredentialView[];
   team: ProjectTeamMember[];
+  time_entries: TimeEntry[];
   client_name?: string | null;
   account_name?: string | null;
 }
@@ -256,6 +260,13 @@ export function ProjectDetail({
           {/* To-do list */}
           <ProjectTodos projectId={project.id} todos={project.todos} />
 
+          {/* Time tracking */}
+          <TimeTracking
+            projectId={project.id}
+            entries={project.time_entries}
+            teamMembers={teamMembers}
+          />
+
           {/* Notes (editable) */}
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
@@ -359,6 +370,11 @@ export function ProjectDetail({
               />
               <DetailRow icon={User} label="Assigned" value={project.assigned_to ?? "—"} />
               <DetailRow icon={Users} label="Developer" value={project.developer ?? "—"} />
+              <DetailRow
+                icon={Clock}
+                label="Hours"
+                value={`${project.time_entries.reduce((s, e) => s + e.hours, 0)}h tracked`}
+              />
               <DetailRow icon={FolderKanban} label="Type" value={project.project_type ?? "—"} />
               <DetailRow
                 icon={Globe}
@@ -410,7 +426,14 @@ function DetailRow({
           {value}
         </a>
       ) : (
-        <span className={cn("min-w-0 flex-1 truncate", urgent && "font-medium text-rose-500")}>{value}</span>
+        // suppressHydrationWarning: some values (deadline countdown) derive
+        // from Date.now() and can change between server render and hydration.
+        <span
+          suppressHydrationWarning
+          className={cn("min-w-0 flex-1 truncate", urgent && "font-medium text-rose-500")}
+        >
+          {value}
+        </span>
       )}
     </div>
   );

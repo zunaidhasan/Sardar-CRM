@@ -1,9 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import * as demo from "@/lib/db/demo-store";
-import { DEMO_PERSONAS } from "@/lib/db/demo-data";
 import { isDemoMode } from "@/lib/utils";
-import { isTeamRole } from "@/lib/demo-role";
 import {
   IMPORT_ENUMS,
   normalizeDate,
@@ -15,6 +13,7 @@ import type {
   Account,
   Activity,
   ActivityType,
+  ActivityWithActor,
   AppUser,
   Attachment,
   AutomationRule,
@@ -41,8 +40,11 @@ import type {
   ProjectTodo,
   TeamMember,
   TeamRole,
+  TimeEntry,
 } from "@/lib/types";
 import { verifyPassword } from "@/lib/password";
+import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
+import { activityActorName } from "@/lib/activity-feed";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
 // ===========================================================================
@@ -59,6 +61,12 @@ async function sb(): Promise<S> {
   return createServerSupabase();
 }
 
+const TEAM_ROLES: TeamRole[] = ["ceo", "executive", "developer", "designer"];
+
+function isTeamRole(value: string | undefined | null): value is TeamRole {
+  return !!value && (TEAM_ROLES as string[]).includes(value);
+}
+
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -69,8 +77,7 @@ export interface CurrentUser {
   profile: Profile | null;
   isDemo: boolean;
   role: TeamRole;
-  // The signed-in user's real role (before any demo preview override). Used
-  // for authorization so "Preview as" can never escalate privileges.
+  // The signed-in user's real role (kept for authorization checks).
   realRole: TeamRole;
   teamMembers: TeamMember[];
 }
@@ -100,25 +107,22 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (isDemoMode()) {
     const db = demo.loadDB();
     // Real login: the session cookie names the user. No cookie -> not logged in.
+    // Identity and data scope follow the logged-in account — the demo store
+    // resolves every getter from this id, so each login sees only its own
+    // account's data (the CEO sees the company-wide workspace).
     const sessionUser = await getDemoSessionUser();
     if (!sessionUser) return null;
-    // Preview override: the sidebar role switcher cookie (demo mode only)
-    // lets the signed-in user preview the app as another persona. Identity
-    // follows the persona so the UI never shows a mismatched name again.
-    const previewRole = await getDemoRole();
-    const role = previewRole ?? sessionUser.role;
-    const persona = previewRole ? DEMO_PERSONAS[previewRole] : null;
     return {
-      id: db.profile.id,
+      id: sessionUser.id,
       email: sessionUser.email ?? "demo@sardaritbd.com",
-      name: persona ? persona.name : sessionUser.name,
+      name: sessionUser.name,
       profile: {
         ...db.profile,
-        full_name: persona ? persona.name : sessionUser.name,
-        role,
+        full_name: sessionUser.name,
+        role: sessionUser.role,
       },
       isDemo: true,
-      role,
+      role: sessionUser.role,
       realRole: sessionUser.role,
       teamMembers: db.team_members,
     };
@@ -153,7 +157,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   return {
     id: user.id,
     email: user.email ?? null,
-    name: user.user_metadata?.full_name ?? null,
+    name:
+      (profile as Profile | null)?.full_name ??
+      user.user_metadata?.full_name ??
+      null,
     profile: (profile as Profile) ?? null,
     isDemo: false,
     role,
@@ -166,6 +173,35 @@ export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
   return user;
+}
+
+// ---------------------------------------------------------------------------
+// Profile (name, avatar, currency, default fee) — edited from Settings.
+// ---------------------------------------------------------------------------
+export async function updateProfile(
+  userId: string,
+  patch: Partial<Profile>,
+): Promise<Profile | null> {
+  if (isDemoMode()) {
+    // Demo logins share the workspace profile; also write the display name
+    // through to the session user's login row so the sidebar/dashboards (which
+    // read sessionUser.name) reflect the edit.
+    const sessionUser = await getDemoSessionUser();
+    if (patch.full_name && sessionUser) {
+      demo.updateDemoUser(sessionUser.username, { name: patch.full_name });
+    }
+    return demo.updateProfile(patch);
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("profiles")
+    .update(patch)
+    .eq("id", userId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Profile;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,15 +256,15 @@ export async function loginWithUsername(
 }
 
 // Agency-only user management. `actor` must be the workspace owner/CEO.
-// Uses the real session role so the demo "Preview as" persona can never
-// escalate into account provisioning.
+// Uses the real session role so a non-CEO login can never escalate into
+// account provisioning.
 export async function requireAgency(user: CurrentUser): Promise<void> {
   if ((user.realRole ?? user.role) !== "ceo") {
     throw new Error("Only agency management can provision user accounts");
   }
 }
 
-export async function fetchUsers(userId: string): Promise<AppUser[]> {
+export async function fetchUsers(): Promise<AppUser[]> {
   if (isDemoMode()) return demo.getUsers();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -389,26 +425,6 @@ export async function updateUserAccount(
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Demo persona (role switcher)
-// In demo mode the signed-in workspace owner can preview the app as a
-// specific team member role (CEO vs Executive) via a cookie.
-// ---------------------------------------------------------------------------
-// Demo preview persona. Returns null when no preview cookie is set so the
-// signed-in user's own role always wins unless they explicitly switch.
-export async function getDemoRole(): Promise<TeamRole | null> {
-  if (!isDemoMode()) return null;
-  try {
-    const { cookies } = await import("next/headers");
-    const store = await cookies();
-    const value = store.get("sardar_demo_role")?.value;
-    if (isTeamRole(value)) return value;
-  } catch {
-    // cookies() unavailable (e.g. client context) -> default
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +746,7 @@ export interface ProjectWithWorkspace extends Project {
   todos: ProjectTodo[];
   credentials: ProjectCredential[];
   team: ProjectTeamMember[];
+  time_entries: TimeEntry[];
 }
 
 export async function fetchProject(
@@ -745,6 +762,7 @@ export async function fetchProject(
       todos: demo.getProjectTodos(userId, id),
       credentials: demo.getProjectCredentials(userId, id),
       team: demo.getProjectTeamMembers(userId, id),
+      time_entries: demo.getTimeEntries(userId, id),
     };
   }
   const client = await sb();
@@ -757,10 +775,11 @@ export async function fetchProject(
     .maybeSingle();
   if (!data) return null;
   const project = data as unknown as Project;
-  const [todos, credentials, team] = await Promise.all([
+  const [todos, credentials, team, time_entries] = await Promise.all([
     fetchProjectTodos(userId, id),
     fetchProjectCredentials(userId, id),
     fetchProjectTeam(userId, id),
+    fetchProjectTimeEntries(userId, id),
   ]);
   return {
     ...project,
@@ -768,6 +787,7 @@ export async function fetchProject(
     todos,
     credentials,
     team,
+    time_entries,
   };
 }
 
@@ -933,6 +953,19 @@ export async function deleteMilestone(userId: string, id: string): Promise<boole
   return !error;
 }
 
+// Every milestone for the user (used by the Calendar page to render milestone
+// due dates). Demo getter already supports an undefined projectId.
+export async function fetchMilestones(userId: string): Promise<Milestone[]> {
+  if (isDemoMode()) return demo.getMilestones(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("milestones")
+    .select("*")
+    .eq("user_id", userId);
+  return (data ?? []) as Milestone[];
+}
+
 // ---------------------------------------------------------------------------
 // Project to-dos
 // ---------------------------------------------------------------------------
@@ -1015,6 +1048,104 @@ export async function deleteProjectTodo(userId: string, id: string): Promise<boo
 }
 
 // ---------------------------------------------------------------------------
+// Time tracking (timesheet rows per project)
+// ---------------------------------------------------------------------------
+export interface TimeEntryInput {
+  date: string; // YYYY-MM-DD
+  hours: number;
+  description?: string | null;
+  assignee?: string | null;
+  billable?: boolean;
+}
+
+// All time entries for the user — used by the Calendar page and the projects
+// list (per-project hour totals), newest first.
+export async function fetchTimeEntries(userId: string): Promise<TimeEntry[]> {
+  if (isDemoMode()) return demo.getTimeEntries(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("time_entries")
+    .select("*")
+    .eq("user_id", userId)
+    .order("date", { ascending: false });
+  return (data ?? []) as TimeEntry[];
+}
+
+export async function fetchProjectTimeEntries(
+  userId: string,
+  projectId: string,
+): Promise<TimeEntry[]> {
+  if (isDemoMode()) return demo.getTimeEntries(userId, projectId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("time_entries")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("date", { ascending: false });
+  return (data ?? []) as TimeEntry[];
+}
+
+export async function createTimeEntry(
+  userId: string,
+  projectId: string,
+  input: TimeEntryInput,
+): Promise<TimeEntry | null> {
+  const row = {
+    user_id: userId,
+    project_id: projectId,
+    date: input.date,
+    hours: input.hours,
+    description: input.description ?? null,
+    assignee: input.assignee ?? null,
+    billable: input.billable ?? true,
+  };
+  if (isDemoMode()) {
+    return demo.insert("time_entries", row as unknown as TimeEntry);
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client.from("time_entries").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as TimeEntry;
+}
+
+export async function updateTimeEntry(
+  userId: string,
+  id: string,
+  patch: Partial<TimeEntry>,
+): Promise<TimeEntry | null> {
+  if (isDemoMode()) {
+    demo.updateById("time_entries", id, patch);
+    return demo.loadDB().time_entries.find((t) => t.id === id) ?? null;
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("time_entries")
+    .update(patch)
+    .eq("user_id", userId)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as TimeEntry;
+}
+
+export async function deleteTimeEntry(userId: string, id: string): Promise<boolean> {
+  if (isDemoMode()) return demo.removeById("time_entries", id);
+  const client = await sb();
+  if (!client) return false;
+  const { error } = await client
+    .from("time_entries")
+    .delete()
+    .eq("user_id", userId)
+    .eq("id", id);
+  return !error;
+}
+
+// ---------------------------------------------------------------------------
 // Project credentials (client logins / access details)
 // ---------------------------------------------------------------------------
 export async function fetchProjectCredentials(
@@ -1049,7 +1180,8 @@ export async function createProjectCredential(
     title: input.title,
     url: input.url ?? null,
     username: input.username ?? null,
-    password: input.password ?? null,
+    // Encrypt client logins before they touch the database.
+    password: input.password ? encryptSecret(input.password) : null,
     notes: input.notes ?? null,
   };
   if (isDemoMode()) {
@@ -1068,18 +1200,31 @@ export async function getProjectCredentialPassword(
   userId: string,
   id: string,
 ): Promise<string | null> {
+  let stored: string | null | undefined;
   if (isDemoMode()) {
-    return demo.loadDB().project_credentials.find((c) => c.id === id && c.user_id === userId)?.password ?? null;
+    const db = demo.loadDB();
+    const cred = db.project_credentials.find((c) => c.id === id);
+    if (!cred) return null;
+    // Only reveal when the caller owns the credential's project (seeded rows
+    // carry the workspace owner id, so check ownership via the scoped list).
+    if (cred.user_id !== userId && !demo.getProjects(userId).some((p) => p.id === cred.project_id)) {
+      return null;
+    }
+    stored = cred.password ?? null;
+  } else {
+    const client = await sb();
+    if (!client) return null;
+    const { data } = await client
+      .from("project_credentials")
+      .select("password")
+      .eq("user_id", userId)
+      .eq("id", id)
+      .maybeSingle();
+    stored = (data?.password as string | null | undefined) ?? null;
   }
-  const client = await sb();
-  if (!client) return null;
-  const { data } = await client
-    .from("project_credentials")
-    .select("password")
-    .eq("user_id", userId)
-    .eq("id", id)
-    .maybeSingle();
-  return (data?.password as string | null | undefined) ?? null;
+  if (stored == null) return null;
+  // Decrypt on reveal; legacy plaintext rows pass through unchanged.
+  return decryptSecret(stored);
 }
 
 export async function updateProjectCredential(
@@ -1087,15 +1232,20 @@ export async function updateProjectCredential(
   id: string,
   patch: Partial<ProjectCredential>,
 ): Promise<ProjectCredential | null> {
+  // Never mutate the caller's patch: clone it and encrypt any password field.
+  const safePatch =
+    patch.password === undefined
+      ? patch
+      : { ...patch, password: patch.password ? encryptSecret(patch.password) : null };
   if (isDemoMode()) {
-    demo.updateById("project_credentials", id, patch);
+    demo.updateById("project_credentials", id, safePatch);
     return demo.loadDB().project_credentials.find((c) => c.id === id) ?? null;
   }
   const client = await sb();
   if (!client) return null;
   const { data, error } = await client
     .from("project_credentials")
-    .update(patch)
+    .update(safePatch)
     .eq("user_id", userId)
     .eq("id", id)
     .select()
@@ -1266,6 +1416,76 @@ export async function fetchActivities(userId: string, limit = 50): Promise<Activ
     .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as Activity[];
+}
+
+/**
+ * Workspace-wide activity feed (used by the CEO dashboard). Includes the
+ * viewer's own actions plus those of their team members.
+ *
+ * Demo mode: every row belongs to the single workspace owner, so this returns
+ * all activities with the actor name read from metadata (seeded team rows).
+ *
+ * Supabase: RLS (activities_workspace_select) scopes the read to the viewer +
+ * their team; actor names are resolved from the team roster via the service
+ * role (team member email -> auth user id -> roster name). Falls back to a
+ * null actor (or metadata.actor) when the key is unavailable, so the feed
+ * never breaks.
+ */
+export async function fetchTeamActivities(
+  userId: string,
+  limit = 50,
+): Promise<ActivityWithActor[]> {
+  if (isDemoMode()) {
+    return demo.getActivities(userId, limit).map((a) => ({
+      ...a,
+      actor_name: activityActorName(a),
+    }));
+  }
+  const client = await sb();
+  if (!client) return [];
+  const [activitiesRes, teamRes] = await Promise.all([
+    client
+      .from("activities")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    client
+      .from("team_members")
+      .select("name, email")
+      .eq("user_id", userId)
+      .eq("is_active", true),
+  ]);
+  const rows = (activitiesRes.data ?? []) as Activity[];
+  const team = (teamRes.data ?? []) as Array<{ name: string; email: string | null }>;
+  const fallback = (): ActivityWithActor[] =>
+    rows.map((a) => ({ ...a, actor_name: activityActorName(a) }));
+  const emails = team
+    .map((t) => t.email?.toLowerCase())
+    .filter((e): e is string => Boolean(e));
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (rows.length === 0 || emails.length === 0 || !url || !serviceKey) return fallback();
+  try {
+    const admin = createSupabaseAdmin(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: authUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const emailToUid = new Map<string, string>();
+    for (const u of authUsers?.users ?? []) {
+      if (u.email) emailToUid.set(u.email.toLowerCase(), u.id);
+    }
+    const uidToName = new Map<string, string>();
+    for (const t of team) {
+      const uid = t.email ? emailToUid.get(t.email.toLowerCase()) : undefined;
+      if (uid) uidToName.set(uid, t.name);
+    }
+    return rows.map((a) => ({
+      ...a,
+      actor_name: uidToName.get(a.user_id) ?? activityActorName(a),
+    }));
+  } catch {
+    return fallback();
+  }
 }
 
 export async function logActivity(

@@ -15,6 +15,10 @@ Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **shad
 - **Email Templates + Automations** — template library and stage-based automation rules
 - **Analytics** — revenue by platform, win rate over time, seller/developer performance
 - **Import** — bring historical XLSX/CSV sheets (order sheets, bid trackers, Fiverr nurture lists) with auto column mapping
+- **Time Tracking** — per-project timesheet with billable/non-billable hours, assignees and weekly totals
+- **Calendar** — month view of every deadline, follow-up, milestone and invoice due date, with one-click **.ics export** to Google Calendar & Outlook
+- **PWA** — installable app (manifest + service worker) with an offline fallback page
+- **i18n** — English / বাংলা language switcher (sidebar + login)
 
 ## Quick start (demo mode)
 
@@ -49,6 +53,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
 4. Optional: set `USER_LLM_API_KEY`, `USER_LLM_BASE_URL`, `USER_LLM_MODEL` to enable real AI proposals.
 5. Set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → service_role) to enable **Settings → Team access** for creating employee logins.
+6. Set `CREDENTIALS_ENCRYPTION_KEY` (any long random string) to store project credential passwords (WP admin, cPanel, FTP, …) **encrypted at rest** with AES-256-GCM. Without it, Supabase mode refuses to save/reveal credentials (fail closed); demo mode stores them as-is.
 
 ## Authentication
 
@@ -57,6 +62,8 @@ Sardar CRM uses **username + password** auth — there is **no public self-regis
 - The **CEO** opens **Settings → Team access**, clicks **New login**, and creates a username/password for each employee (choosing their role: CEO / Executive / Developer / Designer).
 - Logins can be reset (new password), deactivated, or re-rolled at any time.
 - In demo mode all four seeded logins share the initial password `sardar2026` (change it from Settings).
+- **Every login is its own account.** Demo mode scopes data per login like the Supabase RLS model: the CEO sees the whole company, while `zunaid`, `rafi` and `sadia` only see deals/projects/clients/invoices assigned to their persona (plus anything they create). Workspace-level resources (seller accounts, templates, automations) stay shared.
+- Login attempts are rate-limited per IP+username (5 failures / 15 min) and per IP (20 / 15 min) to blunt brute-force attacks.
 
 With Supabase connected, usernames live in `profiles.username`; authentication uses Supabase Auth under the hood, and row-level security guarantees every user sees only their own data. The private `attachments` storage bucket is created by `schema.sql`.
 

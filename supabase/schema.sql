@@ -403,6 +403,23 @@ CREATE TABLE IF NOT EXISTS public.project_team_members (
 CREATE TRIGGER trg_project_team_updated_at BEFORE UPDATE ON public.project_team_members
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- 3.18 time_entries -- timesheet rows logged against a project
+CREATE TABLE IF NOT EXISTS public.time_entries (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  project_id    uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  date          date NOT NULL DEFAULT CURRENT_DATE,
+  hours         numeric(5,2) NOT NULL DEFAULT 0 CHECK (hours > 0 AND hours <= 24),
+  description   text,
+  assignee      text,
+  billable      boolean NOT NULL DEFAULT true,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_time_entries_updated_at BEFORE UPDATE ON public.time_entries
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- ---------------------------------------------------------------------------
 -- 4. INDEXES
 -- ---------------------------------------------------------------------------
@@ -432,6 +449,8 @@ CREATE INDEX IF NOT EXISTS idx_team_email ON public.team_members(email);
 CREATE INDEX IF NOT EXISTS idx_todos_project ON public.project_todos(project_id);
 CREATE INDEX IF NOT EXISTS idx_credentials_project ON public.project_credentials(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_team_project ON public.project_team_members(project_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_project ON public.time_entries(project_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_date ON public.time_entries(date);
 
 -- ---------------------------------------------------------------------------
 -- 5. ROW LEVEL SECURITY
@@ -455,6 +474,7 @@ ALTER TABLE public.team_members     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_todos    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_team_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.time_entries ENABLE ROW LEVEL SECURITY;
 
 -- profiles: user can manage their own profile
 CREATE POLICY "profiles_select_own" ON public.profiles
@@ -487,6 +507,33 @@ CREATE POLICY "milestones_all_own" ON public.milestones
 -- activities
 CREATE POLICY "activities_all_own" ON public.activities
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Workspace-wide read for the CEO activity feed: only a trusted workspace
+-- owner (profiles.role in ceo/owner) can SELECT activities created by any
+-- user whose email matches one of their team members. The "owns team_members
+-- rows" signal alone is spoofable (any authenticated user may insert their
+-- own team_members row), hence the role check. Writes stay per-owner.
+CREATE POLICY "activities_workspace_select" ON public.activities
+  FOR SELECT USING (
+    user_id = auth.uid()
+    OR (
+      EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid() AND p.role IN ('ceo', 'owner')
+      )
+      AND EXISTS (
+        SELECT 1 FROM public.team_members tm
+        WHERE tm.user_id = auth.uid()
+      )
+      AND user_id IN (
+        SELECT u.id FROM auth.users u
+        WHERE lower(u.email) IN (
+          SELECT lower(tm.email) FROM public.team_members tm
+          WHERE tm.user_id = auth.uid() AND tm.email IS NOT NULL
+        )
+      )
+    )
+  );
 
 -- follow_ups
 CREATE POLICY "followups_all_own" ON public.follow_ups
@@ -547,6 +594,10 @@ CREATE POLICY "credentials_all_own" ON public.project_credentials
 
 -- project_team_members
 CREATE POLICY "project_team_all_own" ON public.project_team_members
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- time_entries
+CREATE POLICY "time_entries_all_own" ON public.time_entries
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------

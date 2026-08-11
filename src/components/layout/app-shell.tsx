@@ -11,18 +11,19 @@ import type { TeamRole } from "@/lib/types";
 interface AppShellProps {
   children: React.ReactNode;
   userName: string | null;
+  avatarUrl?: string | null;
   isDemo: boolean;
   role?: TeamRole;
 }
 
-export function AppShell({ children, userName, isDemo, role }: AppShellProps) {
+export function AppShell({ children, userName, avatarUrl, isDemo, role }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r bg-sidebar lg:block">
-        <AppSidebar userName={userName} isDemo={isDemo} role={role} />
+        <AppSidebar userName={userName} avatarUrl={avatarUrl} isDemo={isDemo} role={role} />
       </aside>
 
       {/* Mobile drawer */}
@@ -35,6 +36,7 @@ export function AppShell({ children, userName, isDemo, role }: AppShellProps) {
           <div className="absolute inset-y-0 left-0 w-72 border-r bg-sidebar shadow-xl">
             <AppSidebar
               userName={userName}
+              avatarUrl={avatarUrl}
               isDemo={isDemo}
               role={role}
               onNavigate={() => setMobileOpen(false)}

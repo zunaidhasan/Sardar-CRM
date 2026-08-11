@@ -13,6 +13,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanCard, KanbanCardPreview, type KanbanOpp } from "@/components/kanban/kanban-card";
+import { useI18n } from "@/components/i18n-provider";
 import { KANBAN_STAGES, STAGE_META } from "@/lib/constants";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { OpportunityStage } from "@/lib/types";
@@ -96,6 +97,7 @@ function Column({
   onDelete?: (opp: KanbanOpp) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const { t } = useI18n();
   const meta = STAGE_META[stage];
   const total = opps.reduce((s, o) => s + (o.stage === "won" || o.stage === "lost" ? 0 : o.amount), 0);
 
@@ -104,7 +106,7 @@ function Column({
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
-          <span className="text-sm font-semibold">{meta.label}</span>
+          <span className="text-sm font-semibold">{t(meta.label)}</span>
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             {opps.length}
           </span>
@@ -121,7 +123,7 @@ function Column({
       >
         {opps.length === 0 && (
           <div className="flex h-20 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
-            {isOver ? "Drop here" : "No deals"}
+            {isOver ? t("Drop here") : t("No deals")}
           </div>
         )}
         {opps.map((opp) => (

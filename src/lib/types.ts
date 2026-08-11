@@ -168,7 +168,8 @@ export interface ProjectTodo {
 }
 
 // Client login / access details for a project (WP admin, cPanel, FTP, ...).
-// Passwords are stored in the app DB and masked in the UI until revealed.
+// Passwords are encrypted at rest (AES-256-GCM via CREDENTIALS_ENCRYPTION_KEY)
+// and masked in the UI until revealed.
 export interface ProjectCredential {
   id: string;
   user_id: string;
@@ -178,6 +179,21 @@ export interface ProjectCredential {
   username: string | null;
   password: string | null;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// One logged timesheet row against a project (date, hours, task). Drives
+// the per-project time tracking UI and the Calendar page's time entries.
+export interface TimeEntry {
+  id: string;
+  user_id: string;
+  project_id: string;
+  date: string; // YYYY-MM-DD
+  hours: number; // 0.25 .. 24
+  description: string | null;
+  assignee: string | null;
+  billable: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -213,6 +229,10 @@ export interface Activity {
   metadata: Record<string, unknown>;
   created_at: string;
 }
+
+// Activity plus an optional resolved actor display name, used by team-wide
+// feeds (e.g. the CEO dashboard) where the row's author may not be the viewer.
+export type ActivityWithActor = Activity & { actor_name?: string | null };
 
 export interface FollowUp {
   id: string;

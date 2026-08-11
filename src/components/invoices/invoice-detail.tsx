@@ -50,7 +50,6 @@ interface InvoiceDetailDialogProps {
   project?: Project | null;
   account?: Account | null;
   items: InvoiceItem[];
-  currency: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -75,7 +74,6 @@ export function InvoiceDetailDialog({
   project,
   account,
   items,
-  currency,
   open,
   onOpenChange,
 }: InvoiceDetailDialogProps) {

@@ -3,6 +3,7 @@ import { requireUser, fetchAccounts, fetchUsers } from "@/lib/data";
 import { isDemoMode } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { AccountManager } from "@/components/settings/account-manager";
+import { ProfileEditor } from "@/components/settings/profile-editor";
 import { TeamAccessManager } from "@/components/settings/team-access-manager";
 import { ResetDemoButton } from "@/components/settings/reset-demo-button";
 
@@ -14,7 +15,7 @@ export default async function SettingsPage() {
   const user = await requireUser();
   const [accounts, users, demo] = await Promise.all([
     fetchAccounts(user.id),
-    (user.realRole ?? user.role) === "ceo" ? fetchUsers(user.id) : Promise.resolve([]),
+    (user.realRole ?? user.role) === "ceo" ? fetchUsers() : Promise.resolve([]),
     Promise.resolve(isDemoMode()),
   ]);
 
@@ -27,27 +28,7 @@ export default async function SettingsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-6">
-          <div className="rounded-lg border bg-card p-5 text-card-foreground shadow-sm">
-            <h2 className="text-base font-semibold">Profile</h2>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Name</dt>
-                <dd className="font-medium">{user.profile?.full_name ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Email</dt>
-                <dd className="font-medium">{user.email}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Default currency</dt>
-                <dd className="font-medium">{user.profile?.currency ?? "USD"}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Default fee</dt>
-                <dd className="font-medium">{user.profile?.default_fee_percent ?? 20}%</dd>
-              </div>
-            </dl>
-          </div>
+          <ProfileEditor profile={user.profile} email={user.email} />
 
           <AccountManager accounts={accounts} />
 

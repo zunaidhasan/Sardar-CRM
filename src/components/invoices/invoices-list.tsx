@@ -327,7 +327,6 @@ export function InvoicesList({
               : null
           }
           items={itemsByInvoice.get(detail.id) ?? []}
-          currency={currency}
           open={Boolean(detail)}
           onOpenChange={(o) => {
             if (!o) setDetail(null);

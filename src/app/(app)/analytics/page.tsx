@@ -6,7 +6,8 @@ import {
   fetchAccounts,
 } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
-import { AnalyticsCharts, type AnalyticsSeries } from "@/components/analytics/analytics-charts";
+import { AnalyticsChartsLoader } from "@/components/analytics/analytics-charts-loader";
+import type { AnalyticsSeries } from "@/components/analytics/analytics-charts";
 import { STAGE_META, CURRENCY_SYMBOL } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -126,7 +127,7 @@ export default async function AnalyticsPage() {
         title="Analytics"
         description="Revenue, win rates and performance across platforms, sellers and team."
       />
-      <AnalyticsCharts data={data} />
+      <AnalyticsChartsLoader data={data} />
     </div>
   );
 }

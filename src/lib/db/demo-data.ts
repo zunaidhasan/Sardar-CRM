@@ -19,6 +19,7 @@ import type {
   ProjectTodo,
   TeamMember,
   TeamRole,
+  TimeEntry,
 } from "@/lib/types";
 import { hashPassword } from "@/lib/password";
 
@@ -53,7 +54,7 @@ const ID = {
   opportunities: ["o-3001", "o-3002", "o-3003", "o-3004", "o-3005", "o-3006", "o-3007", "o-3008", "o-3009", "o-3010", "o-3011", "o-3012", "o-3013", "o-3014"],
   projects: ["p-4001", "p-4002", "p-4003", "p-4004", "p-4005", "p-4006", "p-4007", "p-4008", "p-4009", "p-4010"],
   milestones: ["m-5001", "m-5002", "m-5003", "m-5004", "m-5005", "m-5006", "m-5007", "m-5008", "m-5009", "m-5010", "m-5011", "m-5012"],
-  activities: ["act-6001", "act-6002", "act-6003", "act-6004", "act-6005", "act-6006", "act-6007", "act-6008", "act-6009", "act-6010", "act-6011", "act-6012"],
+  activities: ["act-6001", "act-6002", "act-6003", "act-6004", "act-6005", "act-6006", "act-6007", "act-6008", "act-6009", "act-6010", "act-6011", "act-6012", "act-6013", "act-6014", "act-6015", "act-6016", "act-6017", "act-6018"],
   followups: ["f-7001", "f-7002", "f-7003", "f-7004", "f-7005", "f-7006"],
   invoices: ["i-8001", "i-8002", "i-8003", "i-8004", "i-8005", "i-8006", "i-8007"],
   items: ["it-9001", "it-9002", "it-9003", "it-9004", "it-9005", "it-9006"],
@@ -65,6 +66,7 @@ const ID = {
   credentials: ["cr-1501", "cr-1502", "cr-1503", "cr-1504", "cr-1505"],
   projectTeam: ["pt-1601", "pt-1602", "pt-1603", "pt-1604", "pt-1605", "pt-1606"],
   users: ["us-1701", "us-1702", "us-1703", "us-1704"],
+  timeEntries: ["te-1801", "te-1802", "te-1803", "te-1804", "te-1805", "te-1806", "te-1807", "te-1808", "te-1809", "te-1810", "te-1811", "te-1812"],
 } as const;
 
 function d(offsetDays: number): string {
@@ -392,6 +394,110 @@ export function generatedOpportunities(): Opportunity[] {
   return out;
 }
 
+// Timesheet rows for the generated (complete/delivered) projects so their
+// time tracking tab shows history too. Deterministic ids keep the migration
+// merge idempotent for older persisted demo files.
+export function generatedTimeEntries(): TimeEntry[] {
+  const out: TimeEntry[] = [];
+  GEN_PERSONAS.forEach((person, p) => {
+    for (let i = 0; i < 15; i++) {
+      const orderOffset = genOrderOffset(i, p);
+      const projId = `gp-${person.key}-${i}`;
+      const dev = GEN_DEV_NAMES[(i + p) % GEN_DEV_NAMES.length] ?? "Developer";
+      for (let j = 0; j < 2; j++) {
+        out.push({
+          id: `gte-${person.key}-${i}-${j}`,
+          user_id: DEMO_USER_ID,
+          project_id: projId,
+          date: dateOnly(orderOffset + 3 + j * 5),
+          hours: 2 + ((i + j) % 3),
+          description: j === 0 ? "Development work" : "Review & revisions",
+          assignee: j === 0 ? dev : person.name,
+          billable: true,
+          created_at: d(orderOffset + 3 + j * 5),
+          updated_at: d(orderOffset + 4 + j * 5),
+        });
+      }
+    }
+  });
+  return out;
+}
+
+// Activities performed by other team members (carried in metadata.actor), so
+// the workspace feed shows real-looking work by the executive/developer/
+// designer personas instead of only the owner's own actions. Each entry is
+// tied to an existing entity so feed deep-links resolve.
+export function seededTeamActivities(): Activity[] {
+  return [
+    {
+      id: ID.activities[12]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "project",
+      entity_id: ID.projects[0]!,
+      activity_type: "status_change",
+      subject: "Milestone updated: Stripe billing",
+      body: "Stripe billing integration marked in progress on the Delta Startups MVP.",
+      metadata: { actor: "Rafi Ahmed" },
+      created_at: d(-2),
+    },
+    {
+      id: ID.activities[13]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "opportunity",
+      entity_id: ID.opportunities[6]!,
+      activity_type: "proposal_sent",
+      subject: "Quote sent",
+      body: "Sent the $1,100 quote for the mobile onboarding UX.",
+      metadata: { actor: "Zunaid Hasan" },
+      created_at: d(-2),
+    },
+    {
+      id: ID.activities[14]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "project",
+      entity_id: ID.projects[5]!,
+      activity_type: "status_change",
+      subject: "Milestone completed",
+      body: "UX audit & wireframes approved for the Nordk onboarding flow.",
+      metadata: { actor: "Zunaid Hasan" },
+      created_at: d(-4),
+    },
+    {
+      id: ID.activities[15]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "project",
+      entity_id: ID.projects[9]!,
+      activity_type: "note",
+      subject: "Design mockups shared",
+      body: "Waitlist page mockups uploaded for review.",
+      metadata: { actor: "Sadia Rahman" },
+      created_at: d(-3),
+    },
+    {
+      id: ID.activities[16]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "client",
+      entity_id: ID.clients[6]!,
+      activity_type: "email",
+      subject: "Nurture email sent",
+      body: "Followed up with Nordk Apps about the mobile UX project.",
+      metadata: { actor: "Sadia Rahman" },
+      created_at: d(-1),
+    },
+    {
+      id: ID.activities[17]!,
+      user_id: DEMO_USER_ID,
+      entity_type: "project",
+      entity_id: ID.projects[3]!,
+      activity_type: "note",
+      subject: "Handover notes",
+      body: "Delivered final assets and documentation to Lumen Labs.",
+      metadata: { actor: "Rafi Ahmed" },
+      created_at: d(-10),
+    },
+  ];
+}
+
 export function buildDemoData(): {
   demo_version: number;
   profile: Profile;
@@ -405,6 +511,7 @@ export function buildDemoData(): {
   project_todos: ProjectTodo[];
   project_credentials: ProjectCredential[];
   project_team_members: ProjectTeamMember[];
+  time_entries: TimeEntry[];
   activities: Activity[];
   follow_ups: FollowUp[];
   invoices: Invoice[];
@@ -555,10 +662,29 @@ export function buildDemoData(): {
     { id: ID.projectTeam[5]!, user_id: DEMO_USER_ID, project_id: ID.projects[1]!, team_member_id: TM.dev, name: "Rafi Ahmed", role_label: "Developer", created_at: d(-12), updated_at: d(-12) },
   ];
 
+  // Timesheet rows for the seeded base projects (recent dates so the current
+  // month on the Calendar page and the Time tab show live-looking data; a
+  // couple of non-billable rows model meetings/QA).
+  const time_entries: TimeEntry[] = [
+    { id: ID.timeEntries[0]!, user_id: DEMO_USER_ID, project_id: ID.projects[0]!, date: dateOnly(-1), hours: 3.5, description: "Stripe billing integration — build webhook handling", assignee: "Maya Chen", billable: true, created_at: d(-1), updated_at: d(-1) },
+    { id: ID.timeEntries[1]!, user_id: DEMO_USER_ID, project_id: ID.projects[0]!, date: dateOnly(0), hours: 2, description: "Dashboard revision feedback from Marco", assignee: "Rafi Ahmed", billable: true, created_at: d(0), updated_at: d(0) },
+    { id: ID.timeEntries[2]!, user_id: DEMO_USER_ID, project_id: ID.projects[0]!, date: dateOnly(-3), hours: 4, description: "Auth + dashboard skeleton polish", assignee: "Maya Chen", billable: true, created_at: d(-3), updated_at: d(-3) },
+    { id: ID.timeEntries[3]!, user_id: DEMO_USER_ID, project_id: ID.projects[0]!, date: dateOnly(-5), hours: 1, description: "Client sync call (kickoff follow-up)", assignee: "Mamunur Roshid", billable: false, created_at: d(-5), updated_at: d(-5) },
+    { id: ID.timeEntries[4]!, user_id: DEMO_USER_ID, project_id: ID.projects[1]!, date: dateOnly(-2), hours: 3, description: "Portal integration API — map KiteCRM endpoints", assignee: "Alex Kim", billable: true, created_at: d(-2), updated_at: d(-2) },
+    { id: ID.timeEntries[5]!, user_id: DEMO_USER_ID, project_id: ID.projects[1]!, date: dateOnly(-4), hours: 2.5, description: "Frontend portal screens (draft)", assignee: "Alex Kim", billable: true, created_at: d(-4), updated_at: d(-4) },
+    { id: ID.timeEntries[6]!, user_id: DEMO_USER_ID, project_id: ID.projects[1]!, date: dateOnly(-6), hours: 1, description: "API limits discussion with Nina", assignee: "Zunaid Hasan", billable: false, created_at: d(-6), updated_at: d(-6) },
+    { id: ID.timeEntries[7]!, user_id: DEMO_USER_ID, project_id: ID.projects[5]!, date: dateOnly(-1), hours: 3, description: "Design screens — onboarding flow", assignee: "Sadia Rahman", billable: true, created_at: d(-1), updated_at: d(-1) },
+    { id: ID.timeEntries[8]!, user_id: DEMO_USER_ID, project_id: ID.projects[5]!, date: dateOnly(-3), hours: 2, description: "UX audit & wireframes refinement", assignee: "Sadia Rahman", billable: true, created_at: d(-3), updated_at: d(-3) },
+    { id: ID.timeEntries[9]!, user_id: DEMO_USER_ID, project_id: ID.projects[9]!, date: dateOnly(-2), hours: 1.5, description: "Waitlist form build & connect", assignee: "Zunaid Hasan", billable: true, created_at: d(-2), updated_at: d(-2) },
+    { id: ID.timeEntries[10]!, user_id: DEMO_USER_ID, project_id: ID.projects[9]!, date: dateOnly(0), hours: 1, description: "Copy review for waitlist section", assignee: "Sadia Rahman", billable: false, created_at: d(0), updated_at: d(0) },
+    { id: ID.timeEntries[11]!, user_id: DEMO_USER_ID, project_id: ID.projects[3]!, date: dateOnly(-12), hours: 5, description: "Final landing page build + bonus polish", assignee: "Priya Shah", billable: true, created_at: d(-12), updated_at: d(-12) },
+  ];
+
   const allProjects = [...projects, ...generatedProjects()];
   const allOpportunities = [...opportunities, ...generatedOpportunities()];
   const allMilestones = [...milestones, ...generatedMilestones()];
   const allProjectTeam = [...project_team_members, ...generatedTeamMembers()];
+  const allTimeEntries = [...time_entries, ...generatedTimeEntries()];
 
   const activities: Activity[] = [
     { id: ID.activities[0]!, user_id: DEMO_USER_ID, entity_type: "opportunity", entity_id: ID.opportunities[0]!, activity_type: "bid", subject: "Proposal sent", body: "Submitted proposal for WordPress migration, spent 6 connects.", metadata: {}, created_at: d(-4) },
@@ -573,6 +699,11 @@ export function buildDemoData(): {
     { id: ID.activities[9]!, user_id: DEMO_USER_ID, entity_type: "project", entity_id: ID.projects[3]!, activity_type: "status_change", subject: "Project completed", body: "LumenLabs landing page delivered + bonus.", metadata: {}, created_at: d(-10) },
     { id: ID.activities[10]!, user_id: DEMO_USER_ID, entity_type: "opportunity", entity_id: ID.opportunities[12]!, activity_type: "status_change", subject: "Deal won", body: "WooCommerce speed optimization accepted.", metadata: {}, created_at: d(-7) },
     { id: ID.activities[11]!, user_id: DEMO_USER_ID, entity_type: "import", entity_id: "im-1201", activity_type: "import", subject: "Imported April orders", body: "Imported 4 rows from April-2026.xlsx", metadata: {}, created_at: d(-25) },
+    // Actions attributed to other team members (metadata.actor) so the CEO
+    // activity feed shows work happening across the workspace, not just the
+    // owner's own actions. Deterministic ids -> merged into older demo files
+    // by the loadDB migration.
+    ...seededTeamActivities(),
   ];
 
   const follow_ups: FollowUp[] = [
@@ -642,6 +773,7 @@ export function buildDemoData(): {
     project_todos,
     project_credentials,
     project_team_members: allProjectTeam,
+    time_entries: allTimeEntries,
     activities,
     follow_ups,
     invoices: allInvoices,
