@@ -209,6 +209,32 @@ const BN: Record<string, string> = {
   "Drop here": "এখানে ছাড়ুন",
   "Install app": "অ্যাপ ইনস্টল করুন",
   Language: "ভাষা",
+
+  // Outbound leads
+  "Outbound Leads": "আউটবাউন্ড লিড",
+  "Lead Score": "লিড স্কোর",
+  "Outreach Status": "আউটরিচ স্ট্যাটাস",
+  Country: "দেশ",
+  Industry: "শিল্প",
+  Website: "ওয়েবসাইট",
+  Source: "উৎস",
+  "Email Verified": "ইমেইল যাচাইকৃত",
+  "Main Problem": "প্রধান সমস্যা",
+  "Website Review Notes": "ওয়েবসাইট পর্যালোচনা নোট",
+  "LinkedIn URL": "LinkedIn লিংক",
+  "Owner": "দায়িত্বপ্রাপ্ত",
+  "Next Follow-up": "পরবর্তী ফলো-আপ",
+  "Follow-up Count": "ফলো-আপ গণনা",
+  "Mark Follow-up Sent": "ফলো-আপ পাঠানো হয়েছে চিহ্নিত করুন",
+  "Website Review": "ওয়েবসাইট পর্যালোচনা",
+  "Outreach Timeline": "আউটরিচ টাইমলাইন",
+  "Last Email Sent": "শেষ ইমেইল পাঠানো হয়েছে",
+  Contacted: "যোগাযোগ করা হয়েছে",
+  Replied: "উত্তর দেওয়া হয়েছে",
+  "Add outbound lead": "আউটবাউন্ড লিড যোগ করুন",
+  "Outbound lead details": "আউটবাউন্ড লিড বিবরণ",
+  "Due today": "আজ বাকি",
+  "Follow-up overdue": "ফলো-আপ বিলম্বিত",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = {

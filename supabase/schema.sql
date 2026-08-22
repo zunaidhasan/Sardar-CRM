@@ -60,6 +60,14 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
+  CREATE TYPE public.lead_score AS ENUM ('High', 'Medium', 'Low');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.outreach_status AS ENUM ('New', 'Contacted', 'Replied', 'Meeting', 'Proposal', 'Won', 'Lost');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
   CREATE TYPE public.team_member_role AS ENUM ('ceo', 'executive', 'developer', 'designer');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -134,6 +142,21 @@ CREATE TABLE IF NOT EXISTS public.clients (
   account_id    uuid REFERENCES public.accounts(id) ON DELETE SET NULL,
   tags          text[] NOT NULL DEFAULT '{}',
   notes         text,
+  -- Outbound lead fields (cold email campaign)
+  lead_score          public.lead_score,
+  country             text,
+  industry            text,
+  website             text,
+  linkedin_url        text,
+  main_problem_found  text,
+  website_review_notes text,
+  source              text,
+  outreach_status     public.outreach_status NOT NULL DEFAULT 'New',
+  email_verified      boolean NOT NULL DEFAULT false,
+  last_email_sent_at  timestamptz,
+  next_follow_up_date date,
+  follow_up_count     integer NOT NULL DEFAULT 0,
+  owner_id            uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -427,6 +450,8 @@ CREATE INDEX IF NOT EXISTS idx_profiles_user ON public.profiles(id);
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON public.accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_clients_user ON public.clients(user_id);
 CREATE INDEX IF NOT EXISTS idx_clients_account ON public.clients(account_id);
+CREATE INDEX IF NOT EXISTS idx_clients_outreach ON public.clients(outreach_status, lead_score);
+CREATE INDEX IF NOT EXISTS idx_clients_next_followup ON public.clients(next_follow_up_date);
 CREATE INDEX IF NOT EXISTS idx_opps_user_stage ON public.opportunities(user_id, stage);
 CREATE INDEX IF NOT EXISTS idx_opps_client ON public.opportunities(client_id);
 CREATE INDEX IF NOT EXISTS idx_opps_account ON public.opportunities(account_id);

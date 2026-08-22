@@ -6,6 +6,7 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
+  Rocket,
   Settings,
   Sparkles,
   Users,
@@ -22,6 +23,7 @@ export interface NavItem {
 export const NAV_MAIN: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Pipeline", href: "/pipeline", icon: Workflow },
+  { title: "Outbound Leads", href: "/outbound", icon: Rocket },
   { title: "Clients", href: "/clients", icon: Users },
   { title: "Projects & Orders", href: "/projects", icon: ClipboardList },
   { title: "Invoices", href: "/invoices", icon: FileText },

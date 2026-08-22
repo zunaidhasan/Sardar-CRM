@@ -41,9 +41,15 @@ const FIELD_DEFS: Record<ImportEntity, { label: string; required: string[]; fiel
     ],
   },
   clients: {
-    label: "Clients",
+    label: "Clients / Outbound Leads",
     required: ["name"],
-    fields: ["name", "email", "company", "platform", "username", "category", "notes"],
+    fields: [
+      "name", "email", "company", "platform", "username", "category", "notes",
+      // Outbound lead fields
+      "lead_score", "country", "industry", "website", "linkedin_url",
+      "source", "outreach_status", "main_problem_found",
+      "website_review_notes", "next_follow_up_date", "follow_up_count",
+    ],
   },
 };
 
@@ -77,6 +83,18 @@ const FIELD_LABELS: Record<string, string> = {
   company: "Company",
   username: "Username",
   category: "Category",
+  // Outbound lead fields
+  lead_score: "Lead Score",
+  country: "Country",
+  industry: "Industry",
+  website: "Website",
+  linkedin_url: "LinkedIn URL",
+  source: "Source",
+  outreach_status: "Outreach Status",
+  main_problem_found: "Main Problem Found",
+  website_review_notes: "Website Review Notes",
+  next_follow_up_date: "Next Follow-up Date",
+  follow_up_count: "Follow-up Count",
 };
 
 const SYNONYMS: Record<string, string[]> = {

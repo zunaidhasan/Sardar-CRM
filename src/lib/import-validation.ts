@@ -1,6 +1,11 @@
 import {
   BID_STATUS_META,
+  COUNTRY_LIST,
+  INDUSTRY_LIST,
   KANBAN_STAGES,
+  LEAD_SCORE_META,
+  LEAD_SOURCE_LIST,
+  OUTREACH_STATUS_META,
   PLATFORM_META,
   PRIORITY_META,
   PROJECT_STATUS_META,
@@ -24,6 +29,12 @@ export const IMPORT_ENUMS = {
   priority: new Set<string>(Object.keys(PRIORITY_META)),
   stage: new Set<string>(KANBAN_STAGES),
   opportunityType: new Set<string>(["bid", "pre_sales", "direct"]),
+  // Outbound lead enums
+  leadScore: new Set<string>(Object.keys(LEAD_SCORE_META).map((k) => k.toLowerCase())),
+  outreachStatus: new Set<string>(Object.keys(OUTREACH_STATUS_META).map((k) => k.toLowerCase())),
+  country: new Set<string>(COUNTRY_LIST.map((c) => c.toLowerCase())),
+  industry: new Set<string>(INDUSTRY_LIST.map((i) => i.toLowerCase())),
+  leadSource: new Set<string>(LEAD_SOURCE_LIST.map((s) => s.toLowerCase())),
 } as const;
 
 /**

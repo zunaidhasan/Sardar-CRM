@@ -8,6 +8,7 @@ import {
   fetchClients,
   fetchActivities,
   fetchTeamActivities,
+  fetchOutboundLeads,
 } from "@/lib/data";
 import { buildActivityFeed } from "@/lib/activity-feed";
 import { CeoDashboard } from "@/components/dashboard/ceo-dashboard";
@@ -22,7 +23,7 @@ export default async function DashboardPage() {
   // The CEO sees workspace-wide activity (their own + team members', which
   // fetchTeamActivities already includes); executives only see their own.
   // Only the needed fetch runs per role. Fetched in parallel with the rest.
-  const [projects, opportunities, invoices, followUps, clients, ownActivities, teamActivities] =
+  const [projects, opportunities, invoices, followUps, clients, ownActivities, teamActivities, outboundLeads] =
     await Promise.all([
       fetchProjects(user.id),
       fetchOpportunities(user.id),
@@ -31,6 +32,7 @@ export default async function DashboardPage() {
       fetchClients(user.id),
       user.role === "ceo" ? Promise.resolve([]) : fetchActivities(user.id, 20),
       user.role === "ceo" ? fetchTeamActivities(user.id, 20) : Promise.resolve([]),
+      fetchOutboundLeads(user.id),
     ]);
 
   const feed = buildActivityFeed(
@@ -68,6 +70,7 @@ export default async function DashboardPage() {
       projects={projects}
       followUps={followUps}
       activities={feed}
+      outboundLeads={outboundLeads}
     />
   );
 }

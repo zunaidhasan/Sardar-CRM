@@ -538,6 +538,19 @@ export function getClients(userId: string): Client[] {
   const ids = ownedClientIds(userId);
   return db.clients.filter((c) => ids.has(c.id));
 }
+
+// Get outbound leads (clients with outreach_status set)
+export function getOutboundLeads(userId: string): Client[] {
+  const db = loadDB();
+  const all = db.clients;
+  const role = personaRoleForSession(userId);
+  if (role) {
+    const ids = ownedClientIds(userId);
+    return all.filter((c) => ids.has(c.id) && c.outreach_status && c.outreach_status !== "New");
+  }
+  // CEO sees all leads with any outreach activity OR all clients
+  return all.filter((c) => c.outreach_status);
+}
 export function getOpportunities(userId: string): Opportunity[] {
   const db = loadDB();
   const role = personaRoleForSession(userId);

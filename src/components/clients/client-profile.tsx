@@ -7,8 +7,11 @@ import {
   ArrowLeft,
   Building2,
   Calendar,
+  CheckCircle,
+  ExternalLink,
   FileText,
   Globe,
+  Link2,
   Loader2,
   Mail,
   Paperclip,
@@ -24,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/empty-state";
 import { PlatformBadge, ProjectStatusBadge } from "@/components/status-badges";
-import { ACTIVITY_TYPE_LABELS, STAGE_META } from "@/lib/constants";
+import { ACTIVITY_TYPE_LABELS, STAGE_META, LEAD_SCORE_META, OUTREACH_STATUS_META, FOLLOW_UP_SCHEDULE } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, initials, timeAgo } from "@/lib/utils";
 import { logActivityAction, registerAttachmentAction } from "@/app/actions";
 import type {
@@ -44,21 +47,31 @@ export interface ClientProfileData extends Client {
   attachments: Attachment[];
 }
 
+import { CopyPersonalizedEmail } from "@/components/outbound/copy-personalized-email";
+import { LeadScoreBreakdown } from "@/components/outbound/lead-score-breakdown";
+import type { EmailTemplate } from "@/lib/types";
+
 export function ClientProfile({
   client,
   currency,
   userName,
   avatarUrl,
+  templates = [],
 }: {
   client: ClientProfileData;
   currency: string;
   userName?: string | null;
   avatarUrl?: string | null;
+  templates?: EmailTemplate[];
 }) {
   const [editing, setEditing] = React.useState(false);
   const [note, setNote] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+
+  const isOutbound = Boolean(client.outreach_status || client.lead_score || client.source);
+  const nextFollowUp = client.next_follow_up_date;
+  const isOverdue = nextFollowUp && new Date(nextFollowUp) < new Date();
 
   async function submitNote(e: React.FormEvent) {
     e.preventDefault();
@@ -151,6 +164,7 @@ export function ClientProfile({
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
+          {isOutbound && <TabsTrigger value="outreach">Outreach</TabsTrigger>}
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="deals">Deals ({client.opportunities.length})</TabsTrigger>
           <TabsTrigger value="projects">Projects ({client.projects.length})</TabsTrigger>
@@ -264,6 +278,143 @@ export function ClientProfile({
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isOutbound && (
+          <TabsContent value="outreach">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {/* Lead Info Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Lead Info</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <LeadScoreBreakdown lead={client} />
+                  <InfoRow icon={Globe} label="Country" value={client.country ?? "—"} />
+                  <InfoRow icon={Building2} label="Industry" value={client.industry ?? "—"} />
+                  {client.website && (
+                    <div className="flex items-center gap-3">
+                      <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="w-28 shrink-0 text-muted-foreground">Website</span>
+                      <a href={client.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+                        {client.website.replace(/^https?:\/\//, "")}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                  {client.linkedin_url && (
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="w-28 shrink-0 text-muted-foreground">LinkedIn</span>
+                      <a href={client.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+                        Profile
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                  <InfoRow icon={Mail} label="Source" value={client.source ?? "—"} />
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="w-28 shrink-0 text-muted-foreground">Email Verified</span>
+                    <Badge variant="outline" className={cn("border", client.email_verified ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                      {client.email_verified ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Website Review Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Website Review</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Main Problem Found</p>
+                    <p className="rounded-lg bg-muted/60 p-3">{client.main_problem_found || "No notes yet."}</p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Detailed Review Notes</p>
+                    <p className="rounded-lg bg-muted/60 p-3 whitespace-pre-wrap">{client.website_review_notes || "No detailed notes yet."}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Copy Personalized Email */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Personalized Email</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CopyPersonalizedEmail
+                    lead={client}
+                    templates={templates}
+                    userName={userName}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Outreach Timeline */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-base">Outreach Timeline</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Outreach Status</p>
+                      <Badge variant="outline" className={cn("mt-1 border", OUTREACH_STATUS_META[client.outreach_status].badge)}>
+                        {client.outreach_status}
+                      </Badge>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Last Email Sent</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {client.last_email_sent_at ? formatDate(client.last_email_sent_at) : "Never"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Follow-up Count</p>
+                      <p className="mt-1 text-sm font-medium">{client.follow_up_count ?? 0}</p>
+                    </div>
+                    <div className={cn("rounded-lg border p-3", isOverdue && "border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950")}>
+                      <p className="text-xs text-muted-foreground">Next Follow-up</p>
+                      <p className={cn("mt-1 text-sm font-medium", isOverdue && "text-rose-600")}>
+                        {nextFollowUp ? formatDate(nextFollowUp) : "Not set"}
+                      </p>
+                      {isOverdue && <p className="mt-0.5 text-[10px] font-medium text-rose-500">Overdue</p>}
+                    </div>
+                  </div>
+                  {client.follow_up_count && client.follow_up_count > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Follow-up Sequence</p>
+                      <div className="flex items-center gap-2">
+                        {FOLLOW_UP_SCHEDULE.map((step, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 items-center justify-center rounded-full border text-xs font-medium",
+                                (client.follow_up_count ?? 0) > i
+                                  ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+                                  : (client.follow_up_count ?? 0) === i
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-muted bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {i + 1}
+                            </div>
+                            {i < FOLLOW_UP_SCHEDULE.length - 1 && (
+                              <div className={cn("h-px w-6", (client.follow_up_count ?? 0) > i ? "bg-emerald-300" : "bg-muted")} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        )}
 
         <TabsContent value="deals">
           {client.opportunities.length === 0 ? (

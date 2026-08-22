@@ -1,4 +1,5 @@
 import type {
+  Client,
   FollowUp,
   Invoice,
   Milestone,
@@ -42,6 +43,7 @@ export function buildCalendarEvents(input: {
   invoices: Invoice[];
   milestones: Milestone[];
   timeEntries: TimeEntry[];
+  outboundLeads?: Client[];
 }): CalendarEvent[] {
   const events: CalendarEvent[] = [];
   const projectName = new Map(input.projects.map((p) => [p.id, p.project_name]));
@@ -124,6 +126,19 @@ export function buildCalendarEvents(input: {
       subtitle: `${e.assignee ?? "—"} · ${e.billable ? "Billable" : "Non-billable"}`,
       href: `/projects/${e.project_id}`,
       hours: e.hours,
+    });
+  }
+
+  // Outbound lead follow-up dates
+  for (const lead of input.outboundLeads ?? []) {
+    if (!lead.next_follow_up_date || lead.outreach_status === "Won" || lead.outreach_status === "Lost") continue;
+    events.push({
+      id: `ol-${lead.id}`,
+      date: lead.next_follow_up_date,
+      kind: "follow_up",
+      title: `${lead.name} — ${lead.company ?? "Lead"}`,
+      subtitle: `Follow-up #${(lead.follow_up_count ?? 0) + 1}`,
+      href: `/clients/${lead.id}`,
     });
   }
 

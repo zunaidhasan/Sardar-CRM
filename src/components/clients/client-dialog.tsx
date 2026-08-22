@@ -23,8 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PLATFORM_META } from "@/lib/constants";
-import type { Client, Platform } from "@/lib/types";
+import { PLATFORM_META, COUNTRY_LIST, INDUSTRY_LIST, LEAD_SOURCE_LIST } from "@/lib/constants";
+import type { Client, LeadScore, Platform } from "@/lib/types";
 
 export interface ClientDialogProps {
   open: boolean;
@@ -57,6 +57,21 @@ export function ClientDialog({ open, onOpenChange, client, onSaved }: ClientDial
       account_id: null,
       tags: [],
       notes: (form.get("notes") as string) || null,
+      // Outbound fields
+      lead_score: (form.get("lead_score") as LeadScore) || null,
+      country: (form.get("country") as string) || null,
+      industry: (form.get("industry") as string) || null,
+      website: (form.get("website") as string) || null,
+      linkedin_url: (form.get("linkedin_url") as string) || null,
+      main_problem_found: null,
+      website_review_notes: null,
+      source: (form.get("source") as string) || null,
+      outreach_status: client?.outreach_status ?? "New",
+      email_verified: client?.email_verified ?? false,
+      last_email_sent_at: client?.last_email_sent_at ?? null,
+      next_follow_up_date: client?.next_follow_up_date ?? null,
+      follow_up_count: client?.follow_up_count ?? 0,
+      owner_id: client?.owner_id ?? null,
     };
 
     setSaving(true);
@@ -127,6 +142,73 @@ export function ClientDialog({ open, onOpenChange, client, onSaved }: ClientDial
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" name="notes" defaultValue={client?.notes ?? ""} placeholder="Preferences, warnings, reminders..." />
+          </div>
+
+          {/* Outbound lead fields */}
+          <div className="border-t pt-4">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Outbound Lead Details</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Lead Score</Label>
+                <Select name="lead_score" defaultValue={client?.lead_score ?? ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select score" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(["High", "Medium", "Low"] as LeadScore[]).map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Country</Label>
+                <Select name="country" defaultValue={client?.country ?? ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRY_LIST.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Industry</Label>
+                <Select name="industry" defaultValue={client?.industry ?? ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INDUSTRY_LIST.map((i) => (
+                      <SelectItem key={i} value={i}>{i}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Source</Label>
+                <Select name="source" defaultValue={client?.source ?? ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEAD_SOURCE_LIST.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="website">Website</Label>
+                <Input id="website" name="website" defaultValue={client?.website ?? ""} placeholder="https://company.com" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="linkedin_url">LinkedIn URL</Label>
+                <Input id="linkedin_url" name="linkedin_url" defaultValue={client?.linkedin_url ?? ""} placeholder="https://linkedin.com/in/..." />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

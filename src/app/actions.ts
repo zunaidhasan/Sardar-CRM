@@ -12,10 +12,12 @@ import type {
   EmailTemplate,
   EntityType,
   Invoice,
+  LeadScore,
   Milestone,
   MilestoneStatus,
   Opportunity,
   OpportunityStage,
+  OutreachStatus,
   Profile,
   Project,
   ProjectCredential,
@@ -931,5 +933,296 @@ export async function registerAttachmentAction(input: {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to save attachment" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outbound Leads
+// ---------------------------------------------------------------------------
+export async function updateOutreachStatusAction(
+  id: string,
+  status: Client["outreach_status"],
+): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.updateOutreachStatus(user.id, id, status);
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update status" };
+  }
+}
+
+export async function markFollowUpSentAction(id: string): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.markFollowUpSent(user.id, id);
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to mark follow-up" };
+  }
+}
+
+export async function updateLeadScoreAction(
+  id: string,
+  score: Client["lead_score"],
+): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.updateLeadScore(user.id, id, score);
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update score" };
+  }
+}
+
+export async function updateNextFollowUpAction(
+  id: string,
+  date: string | null,
+): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.updateNextFollowUp(user.id, id, date);
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    revalidatePath("/calendar");
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update follow-up date" };
+  }
+}
+
+export async function saveWebsiteReviewAction(
+  id: string,
+  mainProblem: string | null,
+  reviewNotes: string | null,
+): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.saveWebsiteReview(user.id, id, mainProblem, reviewNotes);
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to save review" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bulk actions for outbound leads
+// ---------------------------------------------------------------------------
+export async function bulkUpdateOutreachStatusAction(
+  ids: string[],
+  status: Client["outreach_status"],
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    const user = await data.requireUser();
+    let updated = 0;
+    for (const id of ids) {
+      const result = await data.updateOutreachStatus(user.id, id, status);
+      if (result) updated++;
+    }
+    revalidatePath("/outbound");
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    return { ok: true, data: { updated } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk update failed" };
+  }
+}
+
+export async function bulkUpdateLeadScoreAction(
+  ids: string[],
+  score: Client["lead_score"],
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    const user = await data.requireUser();
+    let updated = 0;
+    for (const id of ids) {
+      const result = await data.updateLeadScore(user.id, id, score);
+      if (result) updated++;
+    }
+    revalidatePath("/outbound");
+    return { ok: true, data: { updated } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk update failed" };
+  }
+}
+
+export async function bulkUpdateOwnerAction(
+  ids: string[],
+  ownerId: string | null,
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    const user = await data.requireUser();
+    let updated = 0;
+    for (const id of ids) {
+      const result = await data.updateClient(user.id, id, { owner_id: ownerId });
+      if (result) updated++;
+    }
+    revalidatePath("/outbound");
+    return { ok: true, data: { updated } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk update failed" };
+  }
+}
+
+export async function bulkUpdateFollowUpDateAction(
+  ids: string[],
+  date: string | null,
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    const user = await data.requireUser();
+    let updated = 0;
+    for (const id of ids) {
+      const result = await data.updateNextFollowUp(user.id, id, date);
+      if (result) updated++;
+    }
+    revalidatePath("/outbound");
+    revalidatePath("/calendar");
+    return { ok: true, data: { updated } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk update failed" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Owner assignment (single lead)
+// ---------------------------------------------------------------------------
+export async function assignLeadOwnerAction(
+  id: string,
+  ownerId: string | null,
+): Promise<ActionResult<Client>> {
+  try {
+    const user = await data.requireUser();
+    const result = await data.updateClient(user.id, id, { owner_id: ownerId });
+    if (!result) return { ok: false, error: "Client not found" };
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    return { ok: true, data: result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to assign owner" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Send outreach email
+// ---------------------------------------------------------------------------
+export async function sendOutreachEmailAction(
+  leadId: string,
+  templateId: string,
+): Promise<ActionResult<{ renderedSubject: string; renderedBody: string }>> {
+  try {
+    const user = await data.requireUser();
+    const [clients, templates] = await Promise.all([
+      data.fetchClients(user.id),
+      data.fetchTemplates(user.id),
+    ]);
+    const lead = clients.find((c) => c.id === leadId);
+    const template = templates.find((t) => t.id === templateId);
+    if (!lead) return { ok: false, error: "Lead not found" };
+    if (!template) return { ok: false, error: "Template not found" };
+
+    const { sendTemplateToLead } = await import("@/lib/email");
+    const result = await sendTemplateToLead({
+      lead,
+      template,
+      senderName: user.name ?? user.profile?.full_name ?? "Sardar IT",
+    });
+
+    if (!result.ok) return { ok: false, error: result.error ?? "Failed to send" };
+
+    // Log the email activity with tracking metadata
+    const activity = await data.logActivity(
+      user.id, "client", leadId, "email",
+      `Email sent: ${result.renderedSubject}`,
+      `Template: ${template.name}`,
+    );
+    // Store tracking ID in activity metadata for open/click tracking
+    if (activity && "metadata" in activity) {
+      const meta = activity.metadata as Record<string, unknown>;
+      meta.tracking_id = result.trackingId;
+      meta.template_id = templateId;
+      meta.subject = result.renderedSubject;
+    }
+
+    // Update last_email_sent_at
+    await data.updateClient(user.id, leadId, {
+      last_email_sent_at: new Date().toISOString(),
+    });
+
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${leadId}`);
+    revalidatePath("/dashboard");
+    return { ok: true, data: { renderedSubject: result.renderedSubject, renderedBody: result.renderedBody } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to send email" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto lead scoring
+// ---------------------------------------------------------------------------
+export async function autoScoreLeadAction(
+  id: string,
+): Promise<ActionResult<{ score: Client["lead_score"] }>> {
+  try {
+    const user = await data.requireUser();
+    const { suggestLeadScore } = await import("@/lib/lead-scoring");
+    const clients = await data.fetchClients(user.id);
+    const lead = clients.find((c) => c.id === id);
+    if (!lead) return { ok: false, error: "Lead not found" };
+
+    const score = suggestLeadScore(lead);
+    const result = await data.updateLeadScore(user.id, id, score);
+    if (!result) return { ok: false, error: "Failed to update score" };
+
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${id}`);
+    return { ok: true, data: { score } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to auto-score" };
+  }
+}
+
+export async function bulkAutoScoreAction(
+  ids: string[],
+): Promise<ActionResult<{ updated: number; scores: Record<string, Client["lead_score"]> }>> {
+  try {
+    const user = await data.requireUser();
+    const { suggestLeadScore } = await import("@/lib/lead-scoring");
+    const clients = await data.fetchClients(user.id);
+    const scores: Record<string, Client["lead_score"]> = {};
+    let updated = 0;
+
+    for (const id of ids) {
+      const lead = clients.find((c) => c.id === id);
+      if (!lead) continue;
+      const score = suggestLeadScore(lead);
+      const result = await data.updateLeadScore(user.id, id, score);
+      if (result) {
+        updated++;
+        scores[id] = score;
+      }
+    }
+
+    revalidatePath("/outbound");
+    return { ok: true, data: { updated, scores } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk auto-score failed" };
   }
 }

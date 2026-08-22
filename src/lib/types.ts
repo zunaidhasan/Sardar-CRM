@@ -11,6 +11,10 @@ export type Priority = "low" | "medium" | "high" | "urgent";
 export type ImportEntity = "opportunities" | "projects" | "clients";
 export type EntityType = "client" | "opportunity" | "project" | "invoice" | "import";
 
+// Outbound lead types
+export type LeadScore = "High" | "Medium" | "Low";
+export type OutreachStatus = "New" | "Contacted" | "Replied" | "Meeting" | "Proposal" | "Won" | "Lost";
+
 // ---------------------------------------------------------------------------
 // Row shapes (mirror supabase/schema.sql exactly)
 // ---------------------------------------------------------------------------
@@ -82,6 +86,21 @@ export interface Client {
   account_id: string | null;
   tags: string[];
   notes: string | null;
+  // Outbound lead fields
+  lead_score: LeadScore | null;
+  country: string | null;
+  industry: string | null;
+  website: string | null;
+  linkedin_url: string | null;
+  main_problem_found: string | null;
+  website_review_notes: string | null;
+  source: string | null;
+  outreach_status: OutreachStatus;
+  email_verified: boolean;
+  last_email_sent_at: string | null;
+  next_follow_up_date: string | null;
+  follow_up_count: number;
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 }

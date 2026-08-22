@@ -20,7 +20,7 @@ import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { STAGE_META, PROJECT_STATUS_META } from "@/lib/constants";
 import { formatCurrency, formatShortDate } from "@/lib/utils";
 import type { ActivityFeedItem } from "@/lib/activity-feed";
-import type { Opportunity, Project, FollowUp } from "@/lib/types";
+import type { Client, Opportunity, Project, FollowUp } from "@/lib/types";
 
 const REVENUE_STATUSES = ["complete", "delivered"];
 const PIPELINE_STAGES = ["lead", "proposal", "negotiation", "active"];
@@ -33,6 +33,7 @@ interface ExecutiveDashboardProps {
   projects: Project[];
   followUps: FollowUp[];
   activities: ActivityFeedItem[];
+  outboundLeads?: Client[];
 }
 
 export function ExecutiveDashboard({
@@ -43,6 +44,7 @@ export function ExecutiveDashboard({
   projects,
   followUps,
   activities,
+  outboundLeads = [],
 }: ExecutiveDashboardProps) {
   const { t } = useI18n();
   // Everything is scoped to deals/projects assigned to this executive.
@@ -204,6 +206,80 @@ export function ExecutiveDashboard({
         {/* Recent activity feed */}
         <ActivityFeed items={activities} avatarUrl={avatarUrl} userName={userName} limit={6} />
       </div>
+
+      {/* Outbound follow-ups (due today / overdue) */}
+      {outboundLeads.length > 0 && (() => {
+        const today = new Date().toISOString().slice(0, 10);
+        const dueFollowUps = outboundLeads
+          .filter((l) => l.next_follow_up_date && l.outreach_status !== "Won" && l.outreach_status !== "Lost")
+          .sort((a, b) => (a.next_follow_up_date! < b.next_follow_up_date! ? -1 : 1));
+        const overdue = dueFollowUps.filter((l) => l.next_follow_up_date! < today);
+        const dueToday = dueFollowUps.filter((l) => l.next_follow_up_date === today);
+        const upcoming = dueFollowUps.filter((l) => l.next_follow_up_date! > today).slice(0, 5);
+        if (dueFollowUps.length === 0) return null;
+        return (
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>Outbound Follow-ups</CardTitle>
+                <CardDescription>Cold email leads needing attention</CardDescription>
+              </div>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/outbound">
+                  {t("View all")} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {overdue.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-rose-500">Overdue ({overdue.length})</p>
+                  {overdue.slice(0, 3).map((l) => (
+                    <Link key={l.id} href={`/clients/${l.id}`} className="flex items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 transition-colors hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950 dark:hover:bg-rose-900">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{l.name}</p>
+                        <p className="text-xs text-rose-500">Due {l.next_follow_up_date}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{l.company}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {dueToday.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-amber-500">Due today ({dueToday.length})</p>
+                  {dueToday.slice(0, 3).map((l) => (
+                    <Link key={l.id} href={`/clients/${l.id}`} className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:hover:bg-amber-900">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{l.name}</p>
+                        <p className="text-xs text-amber-500">Today</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{l.company}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {upcoming.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Upcoming</p>
+                  {upcoming.map((l) => (
+                    <Link key={l.id} href={`/clients/${l.id}`} className="flex items-center justify-between gap-2 rounded-lg border p-2.5 transition-colors hover:bg-accent">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{l.name}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          <CalendarClock className="h-3 w-3" />
+                          {l.next_follow_up_date}
+                        </p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{l.company}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* My follow-ups */}
       <Card>

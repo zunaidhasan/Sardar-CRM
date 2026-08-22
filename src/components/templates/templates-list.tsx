@@ -37,9 +37,27 @@ const VARIABLES = [
   "{{invoice_number}}",
   "{{amount}}",
   "{{due_date}}",
+  // Outbound personalization variables
+  "{{first_name}}",
+  "{{company}}",
+  "{{website}}",
+  "{{main_problem}}",
+  "{{country}}",
 ];
 
-const CATEGORIES = ["follow_up", "nurture", "delivery", "billing", "other"] as const;
+const CATEGORIES = [
+  "follow_up",
+  "nurture",
+  "delivery",
+  "billing",
+  "other",
+  // Outbound categories
+  "Cold Email – eCommerce",
+  "Cold Email – Real Estate",
+  "Cold Email – Agency",
+  "Cold Email – SaaS",
+  "Follow-up – Outbound",
+] as const;
 
 export function TemplatesList({ templates }: { templates: EmailTemplate[] }) {
   const [dialogOpen, setDialogOpen] = React.useState(false);

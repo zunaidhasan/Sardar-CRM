@@ -632,7 +632,50 @@ export async function deleteOpportunity(userId: string, id: string): Promise<boo
 // ---------------------------------------------------------------------------
 // Clients
 // ---------------------------------------------------------------------------
-export type ClientInput = Omit<Client, "id" | "user_id" | "created_at" | "updated_at">;
+export type ClientInput = {
+  name: string;
+  email?: string | null;
+  company?: string | null;
+  platform?: Platform | null;
+  username?: string | null;
+  profile_url?: string | null;
+  category?: string | null;
+  account_id?: string | null;
+  tags?: string[];
+  notes?: string | null;
+  lead_score?: Client["lead_score"];
+  country?: string | null;
+  industry?: string | null;
+  website?: string | null;
+  linkedin_url?: string | null;
+  main_problem_found?: string | null;
+  website_review_notes?: string | null;
+  source?: string | null;
+  outreach_status?: Client["outreach_status"];
+  email_verified?: boolean;
+  last_email_sent_at?: string | null;
+  next_follow_up_date?: string | null;
+  follow_up_count?: number;
+  owner_id?: string | null;
+};
+
+// Outbound-specific update patch
+export type OutboundLeadPatch = Partial<Pick<Client,
+  | "lead_score"
+  | "country"
+  | "industry"
+  | "website"
+  | "linkedin_url"
+  | "main_problem_found"
+  | "website_review_notes"
+  | "source"
+  | "outreach_status"
+  | "email_verified"
+  | "last_email_sent_at"
+  | "next_follow_up_date"
+  | "follow_up_count"
+  | "owner_id"
+>>;
 
 export async function fetchClients(userId: string): Promise<Client[]> {
   if (isDemoMode()) return demo.getClients(userId);
@@ -683,7 +726,25 @@ export async function fetchClientWithRelations(
 }
 
 export async function createClient(userId: string, input: ClientInput): Promise<Client | null> {
-  const row = { ...input, user_id: userId, tags: input.tags ?? [] };
+  const row = {
+    ...input,
+    user_id: userId,
+    tags: input.tags ?? [],
+    lead_score: input.lead_score ?? null,
+    country: input.country ?? null,
+    industry: input.industry ?? null,
+    website: input.website ?? null,
+    linkedin_url: input.linkedin_url ?? null,
+    main_problem_found: input.main_problem_found ?? null,
+    website_review_notes: input.website_review_notes ?? null,
+    source: input.source ?? null,
+    outreach_status: input.outreach_status ?? "New",
+    email_verified: input.email_verified ?? false,
+    last_email_sent_at: input.last_email_sent_at ?? null,
+    next_follow_up_date: input.next_follow_up_date ?? null,
+    follow_up_count: input.follow_up_count ?? 0,
+    owner_id: input.owner_id ?? null,
+  };
   if (isDemoMode()) {
     return demo.insert("clients", row as unknown as Client);
   }
@@ -1838,6 +1899,19 @@ export async function runImport(
           null,
         );
         if (platformRes.error) throw new Error(`platform: ${platformRes.error}`);
+        // Validate outbound fields if present
+        const leadScoreRes = normalizeEnum(row.lead_score, IMPORT_ENUMS.leadScore, null);
+        if (leadScoreRes.error) throw new Error(`lead_score: ${leadScoreRes.error}`);
+        const outreachStatusRes = normalizeEnum(row.outreach_status, IMPORT_ENUMS.outreachStatus, "New");
+        if (outreachStatusRes.error) throw new Error(`outreach_status: ${outreachStatusRes.error}`);
+        const countryRes = normalizeEnum(row.country, IMPORT_ENUMS.country, null);
+        if (countryRes.error) throw new Error(`country: ${countryRes.error}`);
+        const industryRes = normalizeEnum(row.industry, IMPORT_ENUMS.industry, null);
+        if (industryRes.error) throw new Error(`industry: ${industryRes.error}`);
+        const sourceRes = normalizeEnum(row.source, IMPORT_ENUMS.leadSource, null);
+        if (sourceRes.error) throw new Error(`source: ${sourceRes.error}`);
+        const nextFollowUpRes = normalizeDate(row.next_follow_up_date);
+        if (nextFollowUpRes.error) throw new Error(`next_follow_up_date: ${nextFollowUpRes.error}`);
         await createClient(userId, {
           name: String(row.name),
           email: row.email ? String(row.email) : null,
@@ -1849,6 +1923,21 @@ export async function runImport(
           account_id: null,
           tags: [],
           notes: row.notes ? String(row.notes) : null,
+          // Outbound fields
+          lead_score: (leadScoreRes.value as Client["lead_score"]),
+          country: countryRes.value as string | null,
+          industry: industryRes.value as string | null,
+          website: row.website ? String(row.website) : null,
+          linkedin_url: row.linkedin_url ? String(row.linkedin_url) : null,
+          main_problem_found: row.main_problem_found ? String(row.main_problem_found) : null,
+          website_review_notes: row.website_review_notes ? String(row.website_review_notes) : null,
+          source: sourceRes.value as string | null,
+          outreach_status: outreachStatusRes.value as Client["outreach_status"],
+          email_verified: row.email_verified === true || row.email_verified === "true",
+          last_email_sent_at: null,
+          next_follow_up_date: nextFollowUpRes.value,
+          follow_up_count: Number(row.follow_up_count) || 0,
+          owner_id: null,
         });
       }
       imported++;
@@ -1950,4 +2039,125 @@ export async function registerAttachment(
     .single();
   if (error) throw new Error(error.message);
   return data as Attachment;
+}
+
+// ---------------------------------------------------------------------------
+// Outbound Leads (cold email campaign)
+// ---------------------------------------------------------------------------
+export async function fetchOutboundLeads(userId: string): Promise<Client[]> {
+  if (isDemoMode()) return demo.getOutboundLeads(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("clients")
+    .select("*")
+    .eq("user_id", userId)
+    .not("outreach_status", "is", null)
+    .order("next_follow_up_date", { ascending: true, nullsFirst: false });
+  return (data ?? []) as Client[];
+}
+
+export async function updateOutreachStatus(
+  userId: string,
+  id: string,
+  status: Client["outreach_status"],
+): Promise<Client | null> {
+  const patch: Partial<Client> = { outreach_status: status };
+  // Auto-schedule next follow-up when marking as Contacted
+  if (status === "Contacted") {
+    const now = new Date();
+    now.setDate(now.getDate() + 3);
+    patch.next_follow_up_date = now.toISOString().slice(0, 10);
+  }
+  const result = await updateClient(userId, id, patch);
+  if (result) {
+    await logActivity(
+      userId, "client", id, "status_change",
+      `Outreach status changed to ${status}`,
+    );
+  }
+  return result;
+}
+
+export async function markFollowUpSent(
+  userId: string,
+  id: string,
+): Promise<Client | null> {
+  const clients = await fetchClients(userId);
+  const client = clients.find((c) => c.id === id);
+  if (!client) return null;
+  const count = (client.follow_up_count ?? 0) + 1;
+  const now = new Date();
+  let nextDate: string | null = null;
+  // Schedule next follow-up based on count
+  if (count === 1) {
+    now.setDate(now.getDate() + 7);
+    nextDate = now.toISOString().slice(0, 10);
+  } else if (count === 2) {
+    now.setDate(now.getDate() + 13);
+    nextDate = now.toISOString().slice(0, 10);
+  }
+  // After 3 follow-ups, no more automatic scheduling (break-up sent)
+  const patch: Partial<Client> = {
+    follow_up_count: count,
+    last_email_sent_at: new Date().toISOString(),
+    next_follow_up_date: nextDate,
+  };
+  const result = await updateClient(userId, id, patch);
+  if (result) {
+    await logActivity(
+      userId, "client", id, "follow_up",
+      `Follow-up #${count} sent`,
+      nextDate ? `Next follow-up scheduled: ${nextDate}` : "Break-up sequence complete",
+    );
+  }
+  return result;
+}
+
+export async function updateLeadScore(
+  userId: string,
+  id: string,
+  score: Client["lead_score"],
+): Promise<Client | null> {
+  return updateClient(userId, id, { lead_score: score });
+}
+
+export async function updateNextFollowUp(
+  userId: string,
+  id: string,
+  date: string | null,
+): Promise<Client | null> {
+  return updateClient(userId, id, { next_follow_up_date: date });
+}
+
+export async function saveWebsiteReview(
+  userId: string,
+  id: string,
+  mainProblem: string | null,
+  reviewNotes: string | null,
+): Promise<Client | null> {
+  const result = await updateClient(userId, id, {
+    main_problem_found: mainProblem,
+    website_review_notes: reviewNotes,
+  });
+  if (result) {
+    await logActivity(
+      userId, "client", id, "note",
+      "Website review updated",
+      mainProblem ? `Main problem: ${mainProblem}` : undefined,
+    );
+  }
+  return result;
+}
+
+export async function fetchClientsForOwner(userId: string): Promise<Client[]> {
+  if (isDemoMode()) return demo.getClients(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("clients")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as Client[];
 }
