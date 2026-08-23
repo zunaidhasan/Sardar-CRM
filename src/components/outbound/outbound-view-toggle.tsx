@@ -1,25 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { BarChart3, LayoutGrid, Table } from "lucide-react";
+import { BarChart3, FlaskConical, LayoutGrid, ListOrdered, Table } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutboundLeadsList } from "@/components/outbound/outbound-leads-list";
 import { OutboundKanban } from "@/components/outbound/outbound-kanban";
 import { OutboundPipelineReport } from "@/components/outbound/outbound-pipeline-report";
-import type { Client, TeamMember } from "@/lib/types";
+import { SequenceBuilder } from "@/components/outbound/sequence-builder";
+import { ABTestResults } from "@/components/outbound/ab-test-results";
+import type { Client, EmailTemplate, TeamMember } from "@/lib/types";
 
-type ViewMode = "table" | "kanban" | "report";
+type ViewMode = "table" | "kanban" | "report" | "sequences" | "abtest";
 
 export function OutboundViewToggle({
   leads,
   userName,
   teamMembers = [],
   activitiesByClient,
+  templates = [],
 }: {
   leads: Client[];
   userName?: string | null;
   teamMembers?: TeamMember[];
   activitiesByClient?: Map<string, any[]>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  templates?: EmailTemplate[];
 }) {
   const [view, setView] = React.useState<ViewMode>("table");
 
@@ -54,6 +58,24 @@ export function OutboundViewToggle({
           <BarChart3 className="h-3.5 w-3.5" />
           Report
         </Button>
+        <Button
+          variant={view === "sequences" ? "default" : "ghost"}
+          size="sm"
+          className="h-8 px-3"
+          onClick={() => setView("sequences")}
+        >
+          <ListOrdered className="h-3.5 w-3.5" />
+          Sequences
+        </Button>
+        <Button
+          variant={view === "abtest" ? "default" : "ghost"}
+          size="sm"
+          className="h-8 px-3"
+          onClick={() => setView("abtest")}
+        >
+          <FlaskConical className="h-3.5 w-3.5" />
+          A/B Test
+        </Button>
       </div>
 
       {view === "table" && (
@@ -64,6 +86,12 @@ export function OutboundViewToggle({
       )}
       {view === "report" && (
         <OutboundPipelineReport leads={leads} />
+      )}
+      {view === "sequences" && (
+        <SequenceBuilder />
+      )}
+      {view === "abtest" && (
+        <ABTestResults leads={leads} templates={templates} />
       )}
     </div>
   );

@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PLATFORM_META, COUNTRY_LIST, INDUSTRY_LIST, LEAD_SOURCE_LIST } from "@/lib/constants";
+import { checkForDuplicates, type DuplicateCheckResult } from "@/lib/duplicate-detection";
 import type { Client, LeadScore, Platform } from "@/lib/types";
 
 export interface ClientDialogProps {
@@ -31,9 +32,11 @@ export interface ClientDialogProps {
   onOpenChange: (open: boolean) => void;
   client?: Client | null;
   onSaved?: (client: Client) => void;
+  /** All existing clients for duplicate detection */
+  existingClients?: Client[];
 }
 
-export function ClientDialog({ open, onOpenChange, client, onSaved }: ClientDialogProps) {
+export function ClientDialog({ open, onOpenChange, client, onSaved, existingClients = [] }: ClientDialogProps) {
   const [saving, setSaving] = React.useState(false);
   const isEdit = Boolean(client);
 
@@ -44,6 +47,19 @@ export function ClientDialog({ open, onOpenChange, client, onSaved }: ClientDial
     if (!name) {
       toast.error("Client name is required");
       return;
+    }
+
+    // Duplicate detection
+    if (!isEdit && existingClients.length > 0) {
+      const email = (form.get("email") as string) || null;
+      const company = (form.get("company") as string) || null;
+      const dup = checkForDuplicates(existingClients, email, company);
+      if (dup.isDuplicate) {
+        const confirmed = window.confirm(
+          `${dup.message}\n\nContinue adding as a duplicate?`
+        );
+        if (!confirmed) return;
+      }
     }
 
     const payload = {
@@ -93,8 +109,7 @@ export function ClientDialog({ open, onOpenChange, client, onSaved }: ClientDial
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit client" : "Add client"}</DialogTitle>
-          <DialogDescription>Store contact details for a Fiverr or Upwork client.</DialogDescription>
+          <DialogTitle>{isEdit ? "Edit client" : "Add client"}</DialogTitle>            <DialogDescription>Store contact details for a client or outbound lead.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

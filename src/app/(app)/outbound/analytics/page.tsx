@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser, fetchClients, fetchActivities } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { OutboundAnalytics } from "@/components/outbound/outbound-analytics";
+import { ROICalculator } from "@/components/outbound/roi-calculator";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
@@ -41,6 +42,9 @@ export default async function OutboundAnalyticsPage() {
         description="Pipeline performance, conversion rates, and outreach metrics"
       />
       <OutboundAnalytics leads={outboundLeads} emailActivities={emailActivities} />
+      <div className="mt-6">
+        <ROICalculator />
+      </div>
     </div>
   );
 }

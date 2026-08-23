@@ -67,3 +67,72 @@ export function recordFailure(key: string): void {
 export function clearFailures(key: string): void {
   failures.delete(key);
 }
+
+// ---------------------------------------------------------------------------
+// Outbound action rate limiting
+//
+// Prevents accidental mass status changes, bulk operations, and email
+// sending floods. Enforced per user per action type.
+//
+// Limits:
+//   - Status changes:  30 / 5 min per user
+//   - Bulk operations:  5 / 5 min per user
+//   - Email sends:     10 / 5 min per user (Resend free tier: 100/day)
+// ---------------------------------------------------------------------------
+
+const OUTBOUND_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  "outbound:status_change": { max: 30, windowMs: 5 * 60 * 1000 },
+  "outbound:bulk_action": { max: 5, windowMs: 5 * 60 * 1000 },
+  "outbound:send_email": { max: 10, windowMs: 5 * 60 * 1000 },
+  "outbound:create_lead": { max: 20, windowMs: 5 * 60 * 1000 },
+};
+
+const outboundHits = new Map<string, number[]>();
+
+function pruneOutbound(key: string, now: number, windowMs: number): number[] {
+  const hits = (outboundHits.get(key) ?? []).filter((t) => now - t < windowMs);
+  outboundHits.set(key, hits);
+  return hits;
+}
+
+/**
+ * Check if an outbound action is allowed for the given user.
+ * Returns { allowed: true } or { allowed: false, retryAfterSec }.
+ */
+export function checkOutboundRateLimit(
+  userId: string,
+  actionType: keyof typeof OUTBOUND_LIMITS,
+): RateLimitResult {
+  const limit = OUTBOUND_LIMITS[actionType];
+  if (!limit) return { allowed: true, retryAfterSec: 0 };
+
+  const key = `${userId}:${actionType}`;
+  const now = Date.now();
+  const hits = pruneOutbound(key, now, limit.windowMs);
+
+  if (hits.length >= limit.max) {
+    const oldest = hits[0]!;
+    return {
+      allowed: false,
+      retryAfterSec: Math.max(1, Math.ceil((oldest + limit.windowMs - now) / 1000)),
+    };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
+/**
+ * Record an outbound action hit for rate limiting.
+ */
+export function recordOutboundAction(
+  userId: string,
+  actionType: keyof typeof OUTBOUND_LIMITS,
+): void {
+  const key = `${userId}:${actionType}`;
+  const now = Date.now();
+  const limit = OUTBOUND_LIMITS[actionType];
+  if (!limit) return;
+  const hits = pruneOutbound(key, now, limit.windowMs);
+  hits.push(now);
+  outboundHits.set(key, hits);
+}
+

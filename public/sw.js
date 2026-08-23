@@ -72,3 +72,60 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Push Notifications
+//
+// Handles push events for follow-up reminders and other CRM notifications.
+// When a push is received, shows a notification with the provided payload.
+// ---------------------------------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = {
+      title: "Sardar CRM",
+      body: event.data.text(),
+    };
+  }
+
+  const title = payload.title || "Sardar CRM";
+  const options = {
+    body: payload.body || "",
+    icon: payload.icon || "/sardar-fav.png",
+    badge: payload.badge || "/sardar-fav.png",
+    tag: payload.tag || "sardar-crm-notification",
+    data: payload.data || {},
+    actions: payload.actions || [],
+    requireInteraction: payload.requireInteraction || false,
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || "/dashboard";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((clients) => {
+      // Focus existing window if open
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.focus();
+          client.navigate(url);
+          return;
+        }
+      }
+      // Open new window if none exists
+      self.clients.openWindow(url);
+    })
+  );
+});

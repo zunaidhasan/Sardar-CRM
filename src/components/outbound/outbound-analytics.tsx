@@ -254,17 +254,48 @@ export function OutboundAnalytics({
         </Card>
       </div>
 
-      {/* Source + Industry breakdowns */}
+      {/* Source Attribution + Industry breakdowns */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Leads by Source</CardTitle>
+            <CardTitle className="text-base">Source Attribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <BarChart
-              data={sourceData}
-              color="bg-sky-500"
-            />
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs font-medium text-muted-foreground">
+                  <th className="pb-2">Source</th>
+                  <th className="pb-2 text-right">Leads</th>
+                  <th className="pb-2 text-right">Contacted</th>
+                  <th className="pb-2 text-right">Replied</th>
+                  <th className="pb-2 text-right">Won</th>
+                  <th className="pb-2 text-right">Win Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceData.map(({ label }) => {
+                  const srcLeads = leads.filter((l) => (l.source || "Unknown") === label);
+                  const srcContacted = srcLeads.filter((l) => l.outreach_status !== "New").length;
+                  const srcReplied = srcLeads.filter((l) => ["Replied", "Meeting", "Proposal", "Won"].includes(l.outreach_status)).length;
+                  const srcWon = srcLeads.filter((l) => l.outreach_status === "Won").length;
+                  const srcWinRate = srcContacted > 0 ? Math.round((srcWon / srcContacted) * 100) : 0;
+                  return (
+                    <tr key={label} className="border-b last:border-b-0">
+                      <td className="py-2 font-medium">{label}</td>
+                      <td className="py-2 text-right">{srcLeads.length}</td>
+                      <td className="py-2 text-right">{srcContacted}</td>
+                      <td className="py-2 text-right">{srcReplied}</td>
+                      <td className="py-2 text-right text-emerald-600 font-medium">{srcWon}</td>
+                      <td className="py-2 text-right">
+                        <span className={cn("font-medium", srcWinRate >= 50 ? "text-emerald-600" : srcWinRate >= 25 ? "text-amber-600" : "text-muted-foreground")}>
+                          {srcWinRate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </CardContent>
         </Card>
 

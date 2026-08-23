@@ -32,6 +32,8 @@ import {
   checkRateLimit,
   clearFailures,
   recordFailure,
+  checkOutboundRateLimit,
+  recordOutboundAction,
   MAX_IP_FAILURES,
   MAX_USERNAME_FAILURES,
 } from "@/lib/rate-limit";
@@ -945,6 +947,12 @@ export async function updateOutreachStatusAction(
 ): Promise<ActionResult<Client>> {
   try {
     const user = await data.requireUser();
+    // Rate limit: 30 status changes per 5 min per user
+    const rl = checkOutboundRateLimit(user.id, "outbound:status_change");
+    if (!rl.allowed) {
+      return { ok: false, error: `Rate limited. Try again in ${rl.retryAfterSec}s` };
+    }
+    recordOutboundAction(user.id, "outbound:status_change");
     const result = await data.updateOutreachStatus(user.id, id, status);
     if (!result) return { ok: false, error: "Client not found" };
     revalidatePath("/outbound");
@@ -1031,6 +1039,12 @@ export async function bulkUpdateOutreachStatusAction(
 ): Promise<ActionResult<{ updated: number }>> {
   try {
     const user = await data.requireUser();
+    // Rate limit: 5 bulk operations per 5 min per user
+    const rl = checkOutboundRateLimit(user.id, "outbound:bulk_action");
+    if (!rl.allowed) {
+      return { ok: false, error: `Rate limited. Try again in ${rl.retryAfterSec}s` };
+    }
+    recordOutboundAction(user.id, "outbound:bulk_action");
     let updated = 0;
     for (const id of ids) {
       const result = await data.updateOutreachStatus(user.id, id, status);
@@ -1128,6 +1142,12 @@ export async function sendOutreachEmailAction(
 ): Promise<ActionResult<{ renderedSubject: string; renderedBody: string }>> {
   try {
     const user = await data.requireUser();
+    // Rate limit: 10 emails per 5 min per user
+    const rl = checkOutboundRateLimit(user.id, "outbound:send_email");
+    if (!rl.allowed) {
+      return { ok: false, error: `Email rate limited. Try again in ${rl.retryAfterSec}s` };
+    }
+    recordOutboundAction(user.id, "outbound:send_email");
     const [clients, templates] = await Promise.all([
       data.fetchClients(user.id),
       data.fetchTemplates(user.id),

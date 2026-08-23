@@ -49,6 +49,8 @@ export interface ClientProfileData extends Client {
 
 import { CopyPersonalizedEmail } from "@/components/outbound/copy-personalized-email";
 import { LeadScoreBreakdown } from "@/components/outbound/lead-score-breakdown";
+import { AuditLogPanel } from "@/components/outbound/audit-log-panel";
+import { getAuditLog } from "@/lib/audit-log";
 import type { EmailTemplate } from "@/lib/types";
 
 export function ClientProfile({
@@ -410,6 +412,13 @@ export function ClientProfile({
                       </div>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* Audit Log */}
+              <Card className="lg:col-span-2">
+                <CardContent className="pt-6">
+                  <AuditLogPanel entries={getAuditLog(client.id)} />
                 </CardContent>
               </Card>
             </div>

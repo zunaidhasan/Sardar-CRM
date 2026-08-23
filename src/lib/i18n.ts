@@ -235,6 +235,140 @@ const BN: Record<string, string> = {
   "Outbound lead details": "আউটবাউন্ড লিড বিবরণ",
   "Due today": "আজ বাকি",
   "Follow-up overdue": "ফলো-আপ বিলম্বিত",
+
+  // Outbound leads — Kanban & Views
+  "Table View": "টেবিল ভিউ",
+  "Kanban View": "কানবান ভিউ",
+  "Report View": "রিপোর্ট ভিউ",
+  "Select view": "ভিউ নির্বাচন করুন",
+  "No leads in this status": "এই স্ট্যাটাসে কোনো লিড নেই",
+  "Drag to change status": "স্ট্যাটাস পরিবর্তন করতে টেনে আনুন",
+
+  // Outbound leads — Filters & Search
+  Filters: "ফিল্টার",
+  "All statuses": "সব স্ট্যাটাস",
+  "All scores": "সব স্কোর",
+  "All countries": "সব দেশ",
+  "All industries": "সব শিল্প",
+  "All sources": "সব উৎস",
+  "All owners": "সব দায়িত্বপ্রাপ্ত",
+  Unassigned: "অনির্ধারিত",
+  "Clear filters": "ফিল্টার মুছুন",
+  "active filters": "সক্রিয় ফিল্টার",
+  "No leads found": "কোনো লিড পাওয়া যায়নি",
+  "Try adjusting your filters": "আপনার ফিল্টার সামঞ্জস্য করে দেখুন",
+
+  // Outbound leads — Bulk Actions
+  "Bulk Actions": "বাল্ক অ্যাকশন",
+  "selected leads": "নির্বাচিত লিড",
+  "Change Status": "স্ট্যাটাস পরিবর্তন করুন",
+  "Change Score": "স্কোর পরিবর্তন করুন",
+  "Assign Owner": "দায়িত্বপ্রাপ্ত নির্ধারণ করুন",
+  "Set Follow-up Date": "ফলো-আপ তারিখ নির্ধারণ করুন",
+  "Auto-score (AI)": "অটো-স্কোর (AI)",
+
+  // Outbound leads — Quick Actions
+  "Quick Actions": "দ্রুত অ্যাকশন",
+  "Copy Email": "ইমেইল কপি করুন",
+  "Send Email": "ইমেইল পাঠান",
+  "Email copied to clipboard": "ইমেইল ক্লিপবোর্ডে কপি হয়েছে",
+  "Email sent successfully": "ইমেইল সফলভাবে পাঠানো হয়েছে",
+  "Failed to send email": "ইমেইল পাঠাতে ব্যর্থ",
+
+  // Outbound leads — Website Review
+  "Save Review": "পর্যালোচনা সংরক্ষণ করুন",
+  "Problem Found": "সমস্যা পাওয়া গেছে",
+  "Detailed Notes": "বিস্তারিত নোট",
+  "Review saved": "পর্যালোচনা সংরক্ষিত হয়েছে",
+
+  // Outbound leads — Email Preview
+  "Email Preview": "ইমেইল প্রিভিউ",
+  "Light Mode": "লাইট মোড",
+  "Dark Mode": "ডার্ক মোড",
+  "Select template": "টেমপ্লেট নির্বাচন করুন",
+  "Personalized email preview": "ব্যক্তিগতকৃত ইমেইল প্রিভিউ",
+
+  // Outbound leads — Duplicate Detection
+  "Duplicate detected": "ডুপ্লিকেট পাওয়া গেছে",
+  "This lead already exists": "এই লিড ইতিমধ্যে বিদ্যমান",
+  "Continue anyway?": "তবুও চালিয়ে যেতে চান?",
+  "Skip duplicate": "ডুপ্লিকেট এড়িয়ে চলুন",
+
+  // Outbound leads — Export
+  "Export to CSV": "CSV-তে এক্সপোর্ট করুন",
+  "Export filtered leads": "ফিল্টার করা লিড এক্সপোর্ট করুন",
+  "leads exported": "লিড এক্সপোর্ট হয়েছে",
+
+  // Outbound leads — Keyboard Shortcuts
+  "Keyboard Shortcuts": "কীবোর্ড শর্টকাট",
+  "Press ? for help": "সাহায্যের জন্য ? চাপুন",
+  "Status": "স্ট্যাটাস",
+  Score: "স্কোর",
+  "Change lead status": "লিডের স্ট্যাটাস পরিবর্তন করুন",
+  "Set lead score": "লিডের স্কোর নির্ধারণ করুন",
+  "Open follow-up dialog": "ফলো-আপ ডায়ালগ খুলুন",
+  "Open review dialog": "পর্যালোচনা ডায়ালগ খুলুন",
+  "Copy email": "ইমেইল কপি করুন",
+  "Send email": "ইমেইল পাঠান",
+  "Clear selection": "নির্বাচন মুছুন",
+
+  // Outbound leads — Pipeline & Reporting
+  "Conversion Funnel": "রূপান্তর ফানেল",
+  "Email Performance": "ইমেইল পারফরম্যান্স",
+  "Emails sent": "পাঠানো ইমেইল",
+  "Open rate": "খোলার হার",
+  "Click rate": "ক্লিকের হার",
+  "Total opens": "মোট খোলা",
+  "Total clicks": "মোট ক্লিক",
+  "Leads by Source": "উৎস অনুযায়ী লিড",
+  "Leads by Industry": "শিল্প অনুযায়ী লিড",
+  "Leads by Country": "দেশ অনুযায়ী লিড",
+  "Score Distribution": "স্কোর বিতরণ",
+  "Detailed Status Breakdown": "বিস্তারিত স্ট্যাটাস বিশ্লেষণ",
+  "Source Attribution": "উৎস নির্ধারণ",
+  "Avg. Score": "গড় স্কোর",
+  "% of Total": "মোটের %",
+
+  // Outbound leads — ROI Calculator
+  "ROI Calculator": "ROI ক্যালকুলেটর",
+  "Leads / Month": "লিড / মাস",
+  "Avg Deal Value": "গড় ডিল মূল্য",
+  "Conversion Rate": "রূপান্তর হার",
+  "Hours/Week (Manual)": "ঘণ্টা/সপ্তাহ (ম্যানুয়াল)",
+  "Hourly Rate": "ঘণ্টার হার",
+  "Annual Time Savings": "বার্ষিক সময় সাশ্রয়",
+  "Hours Saved / Year": "সাশ্রয় ঘণ্টা / বছর",
+  "Projected Revenue": "প্রকল্পিত রাজস্ব",
+  "Monthly Breakdown": "মাসিক বিশ্লেষণ",
+  "Expected deals": "প্রত্যাশিত ডিল",
+  "Manual hours": "ম্যানুয়াল ঘণ্টা",
+  "With CRM": "CRM সহ",
+  "Manual cost": "ম্যানোয়াল খরচ",
+  "CRM cost": "CRM খরচ",
+  "Net savings": "নিট সাশ্রয়",
+
+  // Outbound leads — Activity Timeline
+  "Activity Timeline": "কার্যক্রম টাইমলাইন",
+  "Last 3 activities": "শেষ ৩টি কার্যক্রম",
+  "View more": "আরও দেখুন",
+  Opens: "খোলা",
+  Clicks: "ক্লিক",
+
+  // Outbound leads — Score Breakdown
+  "Score Breakdown": "স্কোর বিশ্লেষণ",
+  "Has website": "ওয়েবসাইট আছে",
+  "Has email": "ইমেইল আছে",
+  "Email verified": "ইমেইল যাচাইকৃত",
+  "Has LinkedIn": "LinkedIn আছে",
+  "Problem identified": "সমস্যা সনাক্তকৃত",
+  "Engaged (replied)": "সম্পৃক্ত (উত্তর দিয়েছে)",
+  "Follow-ups sent": "ফলো-আপ পাঠানো হয়েছে",
+  "Auto Score": "অটো স্কোর",
+
+  // Outbound leads — Tags
+  Tags: "ট্যাগ",
+  "Filter by tag": "ট্যাগ দ্বারা ফিল্টার",
+  "No tags": "কোনো ট্যাগ নেই",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = {
