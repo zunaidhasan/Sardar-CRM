@@ -1,5 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+
+// Dynamically import next/headers to avoid Turbopack issues
+// with server-only modules in the build pipeline.
+async function getCookies() {
+  const { cookies } = await import("next/headers");
+  return cookies();
+}
 
 // Server-side Supabase client. Only instantiated when env vars are present.
 export async function createServerSupabase() {
@@ -7,7 +13,7 @@ export async function createServerSupabase() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
 
-  const cookieStore = await cookies();
+  const cookieStore = await getCookies();
   return createServerClient(url, anonKey, {
     cookies: {
       getAll() {
