@@ -8,6 +8,8 @@ import {
   Calendar,
   Globe,
   GripVertical,
+  Loader2,
+  Sparkles,
   User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +20,7 @@ import {
   OUTREACH_STATUS_LIST,
   OUTREACH_STATUS_META,
 } from "@/lib/constants";
-import { updateOutreachStatusAction } from "@/app/actions";
+import { updateOutreachStatusAction, enrichLeadAction } from "@/app/actions";
 import type { Client, OutreachStatus, TeamMember } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -39,8 +41,25 @@ const COLUMN_COLORS: Record<OutreachStatus, { bg: string; border: string; header
 };
 
 function LeadCard({ lead, teamMembers }: { lead: Client; teamMembers?: TeamMember[] }) {
+  const router = useRouter();
   const owner = teamMembers?.find((m) => m.id === lead.owner_id);
   const isOverdue = lead.next_follow_up_date && new Date(lead.next_follow_up_date) < new Date();
+  const [enriching, setEnriching] = React.useState(false);
+
+  async function handleEnrich(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEnriching(true);
+    const result = await enrichLeadAction(lead.id);
+    setEnriching(false);
+    if (result.ok) {
+      const filled = Object.keys(result.data?.patch ?? {}).length;
+      toast.success(filled > 0 ? `${lead.name}: enriched ${filled} fields` : `${lead.name}: already up to date`);
+      router.refresh();
+    } else {
+      toast.error(result.error);
+    }
+  }
 
   return (
     <Link
@@ -113,6 +132,21 @@ function LeadCard({ lead, teamMembers }: { lead: Client; teamMembers?: TeamMembe
           &ldquo;{lead.main_problem_found}&rdquo;
         </p>
       )}
+
+      {/* Enrich button */}
+      <button
+        onClick={handleEnrich}
+        disabled={enriching}
+        className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground opacity-0 transition-all hover:bg-muted/60 hover:text-foreground group-hover:opacity-100"
+        title="Enrich with Apollo/Hunter"
+      >
+        {enriching ? (
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-2.5 w-2.5" />
+        )}
+        {enriching ? "Enriching..." : "Enrich"}
+      </button>
     </Link>
   );
 }

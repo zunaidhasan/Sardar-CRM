@@ -209,7 +209,26 @@ export const OUTREACH_STATUS_META: Record<OutreachStatus, { label: string; badge
   },
 };
 
-export const COUNTRY_LIST = ["United States", "United Kingdom", "Canada"] as const;
+export const COUNTRY_LIST = [
+  // North America
+  "United States", "Canada", "Mexico",
+  // Europe
+  "United Kingdom", "Germany", "France", "Netherlands", "Spain", "Italy",
+  "Sweden", "Norway", "Denmark", "Finland", "Switzerland", "Austria",
+  "Belgium", "Ireland", "Portugal", "Poland", "Czech Republic",
+  "Romania", "Hungary",
+  // Asia-Pacific
+  "Australia", "New Zealand", "Singapore", "Japan", "South Korea",
+  "India", "Pakistan", "Bangladesh", "Philippines", "Vietnam",
+  "Thailand", "Indonesia", "Malaysia",
+  // Middle East & Africa
+  "United Arab Emirates", "Saudi Arabia", "Qatar", "Israel", "Turkey",
+  "South Africa", "Nigeria", "Kenya", "Egypt",
+  // Latin America
+  "Brazil", "Argentina", "Colombia", "Chile", "Peru",
+  // Other
+  "Other",
+] as const;
 
 export const INDUSTRY_LIST = [
   "eCommerce",

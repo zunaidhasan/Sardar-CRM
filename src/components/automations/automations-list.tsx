@@ -104,13 +104,26 @@ export function AutomationsList({ rules }: { rules: AutomationRule[] }) {
                     <Badge variant={rule.is_active ? "default" : "secondary"}>
                       {rule.is_active ? "Active" : "Paused"}
                     </Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    When a deal moves to{" "}
-                    <span className="font-medium text-foreground">
-                      {STAGE_META[(rule.trigger_value as keyof typeof STAGE_META) ?? "active"]?.label ?? rule.trigger_value}
-                    </span>{" "}
-                    → <span className="font-medium text-foreground">{rule.action_type}</span>
+                  </div>                  <p className="mt-1 text-xs text-muted-foreground">
+                    {rule.trigger_event === "opportunity.stage_changed" && (
+                      <>When a deal moves to <span className="font-medium text-foreground">
+                        {STAGE_META[(rule.trigger_value as keyof typeof STAGE_META) ?? "active"]?.label ?? rule.trigger_value}
+                      </span></>
+                    )}
+                    {rule.trigger_event === "project.created" && <>When a project is created</>}
+                    {rule.trigger_event === "project.completed" && <>When a project is completed</>}
+                    {rule.trigger_event === "invoice.overdue" && <>When an invoice becomes overdue</>}
+                    {rule.trigger_event === "lead.created" && <>When a new lead is added</>}
+                    {rule.trigger_event === "lead.replied" && <>When a lead replies</>}
+                    {!rule.trigger_event.startsWith("opportunity.") &&
+                     !rule.trigger_event.startsWith("project.") &&
+                     !rule.trigger_event.startsWith("invoice.") &&
+                     !rule.trigger_event.startsWith("lead.") && (
+                      <>On {rule.trigger_event}</>
+                    )}
+                    {" "}→ <span className="font-medium text-foreground">
+                      {rule.action_type.replace(/_/g, " ")}
+                    </span>
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -146,7 +159,23 @@ export function AutomationsList({ rules }: { rules: AutomationRule[] }) {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>When stage changes to</Label>
+                <Label>Trigger event</Label>
+                <Select name="trigger_event" defaultValue="opportunity.stage_changed">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="opportunity.stage_changed">Deal stage changes</SelectItem>
+                    <SelectItem value="project.created">Project created</SelectItem>
+                    <SelectItem value="project.completed">Project completed</SelectItem>
+                    <SelectItem value="invoice.overdue">Invoice overdue</SelectItem>
+                    <SelectItem value="lead.created">New lead added</SelectItem>
+                    <SelectItem value="lead.replied">Lead replied</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>When value is</Label>
                 <Select name="trigger_value" defaultValue="active">
                   <SelectTrigger>
                     <SelectValue />
@@ -159,19 +188,26 @@ export function AutomationsList({ rules }: { rules: AutomationRule[] }) {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  For stage-change triggers only. Other triggers fire regardless of value.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label>Then</Label>
-                <Select name="action_type" defaultValue="create_project">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="create_project">Create project</SelectItem>
-                    <SelectItem value="log_activity">Log activity</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Action</Label>
+              <Select name="action_type" defaultValue="create_project">
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="create_project">Create project</SelectItem>
+                  <SelectItem value="create_invoice">Create invoice</SelectItem>
+                  <SelectItem value="log_activity">Log activity</SelectItem>
+                  <SelectItem value="update_lead_score">Update lead score</SelectItem>
+                  <SelectItem value="send_notification">Send notification</SelectItem>
+                  <SelectItem value="assign_owner">Assign owner</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="project_name_template">Project name template</Label>

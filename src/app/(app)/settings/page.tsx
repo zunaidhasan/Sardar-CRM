@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { requireUser, fetchAccounts, fetchUsers } from "@/lib/data";
 import { isDemoMode } from "@/lib/utils";
+import { listApiKeys } from "@/lib/api-keys";
 import { PageHeader } from "@/components/page-header";
 import { AccountManager } from "@/components/settings/account-manager";
 import { ProfileEditor } from "@/components/settings/profile-editor";
 import { TeamAccessManager } from "@/components/settings/team-access-manager";
 import { ResetDemoButton } from "@/components/settings/reset-demo-button";
+import { ApiKeysManager } from "@/components/settings/api-keys-manager";
+import { ExternalIntegrations } from "@/components/settings/external-integrations";
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -13,10 +16,11 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [accounts, users, demo] = await Promise.all([
+  const [accounts, users, demo, apiKeys] = await Promise.all([
     fetchAccounts(user.id),
     (user.realRole ?? user.role) === "ceo" ? fetchUsers() : Promise.resolve([]),
     Promise.resolve(isDemoMode()),
+    listApiKeys(user.id),
   ]);
 
   const llmConfigured =
@@ -33,9 +37,19 @@ export default async function SettingsPage() {
           <AccountManager accounts={accounts} />
 
           {(user.realRole ?? user.role) === "ceo" && <TeamAccessManager users={users} />}
+
+          <ApiKeysManager keys={apiKeys} isDemo={demo} />
         </section>
 
         <section className="space-y-6">
+          <ExternalIntegrations
+            integrations={[
+              { name: "Apollo", configured: Boolean(process.env.APOLLO_API_KEY), envVar: "APOLLO_API_KEY" },
+              { name: "Hunter", configured: Boolean(process.env.HUNTER_API_KEY), envVar: "HUNTER_API_KEY" },
+            ]}
+            isDemo={demo}
+          />
+
           <div className="rounded-lg border bg-card p-5 text-card-foreground shadow-sm">
             <h2 className="text-base font-semibold">AI Proposal Generator</h2>
             <p className="mt-2 text-sm text-muted-foreground">

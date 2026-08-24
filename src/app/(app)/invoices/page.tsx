@@ -9,6 +9,8 @@ import {
 } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { InvoicesList } from "@/components/invoices/invoices-list";
+import { GenericExportButton } from "@/components/generic-export-button";
+import { INVOICE_COLUMNS } from "@/lib/generic-export";
 import type { InvoiceItem } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -37,6 +39,7 @@ export default async function InvoicesPage() {
       <PageHeader
         title="Invoicing Hub"
         description="Create invoices from projects, track paid, pending and overdue. Click any invoice to open its full order invoice."
+        actions={<GenericExportButton data={invoices} columns={INVOICE_COLUMNS} filename="invoices" />}
       />
       <InvoicesList
         invoices={invoices}

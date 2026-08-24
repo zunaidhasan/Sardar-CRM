@@ -25,8 +25,10 @@ import type {
   ProjectTodo,
   TeamRole,
   TimeEntry,
+  ApiKeyRow,
 } from "@/lib/types";
 import { resetDemo, demoDbPath } from "@/lib/db/demo-store";
+import * as apiKeysModule from "@/lib/api-keys";
 import { generateProposal, type ProposalTone } from "@/lib/proposal";
 import {
   checkRateLimit,
@@ -263,6 +265,23 @@ export async function deleteMilestoneAction(projectId: string, id: string): Prom
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to delete milestone" };
+  }
+}
+
+export async function reorderMilestonesAction(
+  projectId: string,
+  milestoneIds: string[],
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    // Update order_index for each milestone based on the new order
+    for (let i = 0; i < milestoneIds.length; i++) {
+      await data.updateMilestone(user.id, milestoneIds[i], { order_index: i });
+    }
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to reorder milestones" };
   }
 }
 
@@ -707,6 +726,100 @@ export async function createAccountAction(
 }
 
 // ---------------------------------------------------------------------------
+// API Keys
+// ---------------------------------------------------------------------------
+
+export async function listApiKeysAction(): Promise<ActionResult<ApiKeyRow[]>> {
+  try {
+    const user = await data.requireUser();
+    const keys = await apiKeysModule.listApiKeys(user.id);
+    return { ok: true, data: keys };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to list API keys" };
+  }
+}
+
+export async function createApiKeyAction(
+  name: string,
+  scopes: string[] = ["read", "write"],
+): Promise<ActionResult<{ rawKey: string; id: string }>> {
+  try {
+    const user = await data.requireUser();
+    const result = await apiKeysModule.createApiKey(user.id, name, scopes);
+    revalidatePath("/settings");
+    return { ok: true, data: { rawKey: result.rawKey, id: result.id } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create API key" };
+  }
+}
+
+export async function revokeApiKeyAction(keyId: string): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    const ok = await apiKeysModule.revokeApiKey(user.id, keyId);
+    if (!ok) return { ok: false, error: "Failed to revoke key" };
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to revoke API key" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// External Integration Testing
+// ---------------------------------------------------------------------------
+
+export async function testEnrichmentAction(
+  provider: string,
+): Promise<ActionResult> {
+  try {
+    await data.requireUser();
+    if (provider === "Apollo") {
+      const key = process.env.APOLLO_API_KEY;
+      if (!key) return { ok: false, error: "APOLLO_API_KEY not set in environment" };
+      // Lightweight test: try to reach the API
+      const res = await fetch("https://api.apollo.io/v1/people/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: key, email: "test@example.com" }),
+      });
+      if (res.ok || res.status === 404) {
+        return { ok: true };
+      }
+      return { ok: false, error: `Apollo API returned ${res.status}` };
+    }
+    if (provider === "Hunter") {
+      const key = process.env.HUNTER_API_KEY;
+      if (!key) return { ok: false, error: "HUNTER_API_KEY not set in environment" };
+      const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
+      if (res.ok) {
+        const data = await res.json();
+        const remaining = data.data?.quota?.requests ?? "?";
+        return { ok: true };
+      }
+      return { ok: false, error: `Hunter API returned ${res.status}` };
+    }
+    return { ok: false, error: `Unknown provider: ${provider}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Test failed" };
+  }
+}
+
+export async function testWebhookAction(url: string): Promise<ActionResult> {
+  try {
+    await data.requireUser();
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) return { ok: true };
+    return { ok: false, error: `Endpoint returned ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Webhook unreachable" };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auth (username + password; no public self-registration)
 // ---------------------------------------------------------------------------
 export async function loginAction(
@@ -1027,6 +1140,85 @@ export async function saveWebsiteReviewAction(
     return { ok: true, data: result };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to save review" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lead Enrichment (Apollo / Hunter)
+// ---------------------------------------------------------------------------
+
+export async function enrichLeadAction(
+  clientId: string,
+): Promise<ActionResult<{ enrichment: import("@/lib/lead-enrichment").EnrichmentResult; patch: Record<string, unknown> }>> {
+  try {
+    const user = await data.requireUser();
+    const client = await data.fetchClient(user.id, clientId);
+    if (!client) return { ok: false, error: "Client not found" };
+
+    const { enrichLead, applyEnrichment } = await import("@/lib/lead-enrichment");
+    const enrichment = await enrichLead({
+      email: client.email,
+      website: client.website,
+      company: client.company,
+    });
+
+    if (enrichment.error && !enrichment.company) {
+      return { ok: false, error: enrichment.error };
+    }
+
+    const patch = applyEnrichment(client, enrichment);
+    if (Object.keys(patch).length > 0) {
+      await data.updateClient(user.id, clientId, patch as Partial<Client>);
+    }
+
+    revalidatePath("/outbound");
+    revalidatePath(`/clients/${clientId}`);
+    return { ok: true, data: { enrichment, patch } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Enrichment failed" };
+  }
+}
+
+export async function bulkEnrichLeadsAction(
+  ids: string[],
+): Promise<ActionResult<{ enriched: number; errors: string[] }>> {
+  try {
+    const user = await data.requireUser();
+    const { enrichLead, applyEnrichment } = await import("@/lib/lead-enrichment");
+
+    let enriched = 0;
+    const errors: string[] = [];
+
+    for (const id of ids) {
+      try {
+        const client = await data.fetchClient(user.id, id);
+        if (!client) { errors.push(`${id}: not found`); continue; }
+
+        const result = await enrichLead({
+          email: client.email,
+          website: client.website,
+          company: client.company,
+        });
+
+        if (result.error && !result.company) {
+          errors.push(`${client.name}: ${result.error}`);
+          continue;
+        }
+
+        const patch = applyEnrichment(client, result);
+        if (Object.keys(patch).length > 0) {
+          await data.updateClient(user.id, id, patch as Partial<Client>);
+          enriched++;
+        }
+      } catch (err) {
+        errors.push(`${id}: ${err instanceof Error ? err.message : "unknown"}`);
+      }
+    }
+
+    revalidatePath("/outbound");
+    return { ok: true, data: { enriched, errors } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bulk enrichment failed" };
   }
 }
 

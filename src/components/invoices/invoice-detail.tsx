@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   BadgeCheck,
   CalendarDays,
+  FileDown,
   FileText,
   Loader2,
   Receipt,
@@ -363,6 +364,23 @@ export function InvoiceDetailDialog({
                 Reopen
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                import("@/lib/invoice-pdf").then(({ openInvoicePDF }) => {
+                  openInvoicePDF({
+                    invoice,
+                    items: lineItems,
+                    client,
+                    currency: invoice.currency,
+                  });
+                });
+              }}
+            >
+              <FileDown className="h-4 w-4" />
+              PDF
+            </Button>
           </div>
         </div>
       </DialogContent>

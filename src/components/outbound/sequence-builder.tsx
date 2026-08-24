@@ -156,10 +156,16 @@ export function SequenceBuilder() {
   const [editingSteps, setEditingSteps] = React.useState<SequenceStep[]>([]);
   const [showNew, setShowNew] = React.useState(false);
 
-  // Load sequences on mount
+  // Load sequences on mount (async — Supabase or demo store)
   React.useEffect(() => {
-    setSequences(getSequences());
+    getSequences().then(setSequences);
   }, []);
+
+  /** Reload sequences from the store. */
+  async function reloadSequences() {
+    const updated = await getSequences();
+    setSequences(updated);
+  }
 
   const selected = sequences.find((s) => s.id === selectedId);
 
@@ -225,7 +231,7 @@ export function SequenceBuilder() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingName.trim()) {
       toast.error("Sequence name is required");
       return;
@@ -236,14 +242,14 @@ export function SequenceBuilder() {
     }
 
     if (selectedId) {
-      updateSequence(selectedId, {
+      await updateSequence(selectedId, {
         name: editingName,
         description: editingDesc,
         steps: editingSteps,
       });
       toast.success("Sequence updated");
     } else {
-      createSequence({
+      await createSequence({
         name: editingName,
         description: editingDesc,
         steps: editingSteps,
@@ -251,23 +257,23 @@ export function SequenceBuilder() {
       toast.success("Sequence created");
     }
 
-    setSequences(getSequences());
+    await reloadSequences();
     setShowNew(false);
     setSelectedId(null);
   };
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
     const seq = sequences.find((s) => s.id === id);
     if (!seq) return;
-    updateSequence(id, { isActive: !seq.isActive });
-    setSequences(getSequences());
+    await updateSequence(id, { isActive: !seq.isActive });
+    await reloadSequences();
     toast.success(seq.isActive ? "Sequence paused" : "Sequence activated");
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Delete this sequence?")) return;
-    deleteSequence(id);
-    setSequences(getSequences());
+    await deleteSequence(id);
+    await reloadSequences();
     setSelectedId(null);
     setShowNew(false);
     toast.success("Sequence deleted");

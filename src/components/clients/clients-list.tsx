@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search, Users } from "lucide-react";
-import { ClientDialog } from "@/components/clients/client-dialog";
+import { QuickAddClientDialog } from "@/components/clients/quick-add-client-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -101,12 +101,13 @@ export function ClientsList({ clients }: { clients: Client[] }) {
         </div>
       )}
 
-      <ClientDialog
+      <QuickAddClientDialog
         open={open}
         onOpenChange={(o) => {
           setOpen(o);
           if (!o) router.replace("/clients");
         }}
+        existingClients={clients}
       />
     </>
   );

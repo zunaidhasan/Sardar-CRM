@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { validateApiKey, type ValidatedKey } from "@/lib/api-keys";
+import { checkApiRateLimit, recordApiHit } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // REST API: /api/v1/leads
+//
+// Authentication: Bearer token with a valid API key (sb_live_...)
+//   - Key must exist in the api_keys table and be active
+//   - Key must not be expired
+//   - Key must have "read" scope for GET, "write" scope for POST
 //
 // GET  — List outbound leads (with pagination, filtering)
 // POST — Create a new outbound lead
@@ -18,27 +25,46 @@ function getSupabaseAdmin(): any {
   });
 }
 
-async function authenticateUser(request: NextRequest): Promise<string | null> {
+/**
+ * Authenticate the request using a proper API key.
+ * Returns the validated key info if valid, or null.
+ */
+async function authenticateUser(
+  request: NextRequest,
+  requiredScope: string = "read",
+): Promise<ValidatedKey | null> {
   const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    const admin = getSupabaseAdmin();
-    if (!admin) return null;
-    const { data } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("username", token)
-      .maybeSingle();
-    return data?.id ?? null;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const token = authHeader.slice(7);
+  const validated = await validateApiKey(token);
+  if (!validated) return null;
+
+  // Check scope
+  if (!validated.scopes.includes(requiredScope) && !validated.scopes.includes("admin")) {
+    return null;
   }
-  return null;
+
+  return validated;
 }
 
 export async function GET(request: NextRequest) {
-  const userId = await authenticateUser(request);
-  if (!userId) {
+  const auth = await authenticateUser(request, "read");
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = auth.userId;
+
+  // Rate limit check
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rl = checkApiRateLimit(auth.keyId, ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    );
+  }
+  recordApiHit(auth.keyId, ip);
 
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
@@ -112,10 +138,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = await authenticateUser(request);
-  if (!userId) {
+  const auth = await authenticateUser(request, "write");
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = auth.userId;
+
+  // Rate limit check
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rl = checkApiRateLimit(auth.keyId, ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    );
+  }
+  recordApiHit(auth.keyId, ip);
 
   let body: Record<string, unknown>;
   try {

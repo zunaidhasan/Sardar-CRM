@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { OutboundViewToggle } from "@/components/outbound/outbound-view-toggle";
 import { ExportLeadsButton } from "@/components/outbound/export-leads-button";
 import { FollowUpReminderBanner } from "@/components/outbound/follow-up-reminder-banner";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
@@ -55,7 +55,7 @@ export default async function OutboundPage() {
           </div>
         }
       />
-      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <Suspense fallback={<TableSkeleton rows={8} cols={8} />}>
         <OutboundViewToggle
           leads={outboundLeads}
           userName={user.name}

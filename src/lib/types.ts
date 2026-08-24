@@ -375,3 +375,87 @@ export interface InvoiceWithRelations extends Invoice {
 }
 
 export type AutomationWithRelations = AutomationRule;
+
+// ---------------------------------------------------------------------------
+// Recurring Invoices
+// ---------------------------------------------------------------------------
+
+export type RecurringFrequency = "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
+
+export interface RecurringInvoice {
+  id: string;
+  user_id: string;
+  client_id: string | null;
+  project_id: string | null;
+  name: string;
+  amount: number;
+  currency: string;
+  frequency: RecurringFrequency;
+  description: string | null;
+  is_active: boolean;
+  next_run_date: string;
+  last_run_date: string | null;
+  total_runs: number;
+  max_runs: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Email Sequences (persisted in Supabase)
+// ---------------------------------------------------------------------------
+
+export interface EmailSequenceRow {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SequenceStepRow {
+  id: string;
+  sequence_id: string;
+  user_id: string;
+  order_index: number;
+  subject: string;
+  body: string;
+  delay_days: number;
+  status: "active" | "paused" | "completed";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SequenceEnrollmentRow {
+  id: string;
+  sequence_id: string;
+  lead_id: string;
+  user_id: string;
+  current_step: number;
+  status: "active" | "paused" | "completed" | "exited";
+  enrolled_at: string;
+  last_sent_at: string | null;
+  next_send_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// API Keys
+// ---------------------------------------------------------------------------
+
+export interface ApiKeyRow {
+  id: string;
+  user_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  scopes: string[];
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  expires_at: string | null;
+}

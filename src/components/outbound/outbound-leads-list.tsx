@@ -66,6 +66,7 @@ import {
   bulkUpdateOwnerAction,
   bulkUpdateFollowUpDateAction,
   bulkAutoScoreAction,
+  bulkEnrichLeadsAction,
 } from "@/app/actions";
 import { LeadActivityTimeline } from "@/components/outbound/lead-activity-timeline";
 import type { Activity, Client, LeadScore, OutreachStatus, TeamMember } from "@/lib/types";
@@ -121,6 +122,7 @@ export function OutboundLeadsList({
   const [bulkAction, setBulkAction] = React.useState<string>("");
   const [bulkValue, setBulkValue] = React.useState("");
   const [bulkSaving, setBulkSaving] = React.useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false);
 
   // Keyboard shortcuts
   const [focusedRow, setFocusedRow] = React.useState<string | null>(null);
@@ -376,6 +378,25 @@ export function OutboundLeadsList({
         result = autoResult;
         break;
       }
+      case "enrich": {
+        const enrichResult = await bulkEnrichLeadsAction(ids);
+        if (enrichResult.ok) {
+          const enriched = enrichResult.data?.enriched ?? 0;
+          const errCount = enrichResult.data?.errors?.length ?? 0;
+          toast.success(
+            `${enriched} lead${enriched !== 1 ? "s" : ""} enriched` +
+            (errCount > 0 ? ` (${errCount} failed)` : "")
+          );
+          setSelected(new Set());
+          setBulkAction("");
+          setBulkValue("");
+          setBulkSaving(false);
+          router.refresh();
+          return;
+        }
+        result = enrichResult;
+        break;
+      }
       default:
         setBulkSaving(false);
         return;
@@ -535,6 +556,7 @@ export function OutboundLeadsList({
               <SelectItem value="owner">Assign owner</SelectItem>
               <SelectItem value="follow_up">Set follow-up date</SelectItem>
               <SelectItem value="auto_score">Auto-score (AI)</SelectItem>
+              <SelectItem value="enrich">Enrich (Apollo/Hunter)</SelectItem>
             </SelectContent>
           </Select>
 
@@ -590,7 +612,14 @@ export function OutboundLeadsList({
           <Button
             size="sm"
             disabled={bulkSaving || !bulkValue}
-            onClick={executeBulkAction}
+            onClick={() => {
+              // Confirm before applying bulk changes to multiple leads
+              if (selected.size >= 3) {
+                setBulkConfirmOpen(true);
+              } else {
+                executeBulkAction();
+              }
+            }}
           >
             {bulkSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Apply
@@ -1090,6 +1119,32 @@ export function OutboundLeadsList({
             <Button onClick={saveFollowUpDate} disabled={followUpSaving}>
               {followUpSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk action confirmation dialog */}
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirm bulk update</DialogTitle>
+            <DialogDescription>
+              You&apos;re about to update {selected.size} leads. This action will apply
+              {bulkAction === "status" && ` status → ${bulkValue}`}
+              {bulkAction === "score" && ` score → ${bulkValue || "(clear)"}`}
+              {bulkAction === "owner" && ` owner → ${bulkValue || "(unassign)"}`}
+              {bulkAction === "follow_up" && ` follow-up date → ${bulkValue}`}
+              {bulkAction === "auto_score" && " auto-scoring based on lead data"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => { setBulkConfirmOpen(false); executeBulkAction(); }}>
+              {bulkSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

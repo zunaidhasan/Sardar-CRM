@@ -4,7 +4,7 @@ import { requireUser, fetchOpportunities, fetchClients } from "@/lib/data";
 import { buildPipelineData } from "@/lib/pipeline";
 import { PageHeader } from "@/components/page-header";
 import { PipelineClient } from "@/components/kanban/pipeline-client";
-import { Skeleton } from "@/components/ui/skeleton";
+import { KanbanSkeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = {
   title: "Pipeline",
@@ -25,7 +25,7 @@ export default async function PipelinePage() {
         title="Deal Pipeline"
         description="Track Upwork bids and Fiverr pre-sales from lead to won. Drag cards to update stages."
       />
-      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <Suspense fallback={<KanbanSkeleton columns={6} />}>
         <PipelineClient data={data} />
       </Suspense>
     </div>

@@ -187,7 +187,8 @@ describe("findOverdueLeads", () => {
   });
 
   it("finds today's follow-ups", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const leads = [
       makeClient({ id: "1", next_follow_up_date: today, outreach_status: "Contacted" }),
     ];

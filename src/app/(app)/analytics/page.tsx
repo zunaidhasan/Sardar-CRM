@@ -7,6 +7,7 @@ import {
 } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { AnalyticsChartsLoader } from "@/components/analytics/analytics-charts-loader";
+import { PipelineFunnel } from "@/components/analytics/pipeline-funnel";
 import type { AnalyticsSeries } from "@/components/analytics/analytics-charts";
 import { STAGE_META, CURRENCY_SYMBOL } from "@/lib/constants";
 
@@ -127,7 +128,14 @@ export default async function AnalyticsPage() {
         title="Analytics"
         description="Revenue, win rates and performance across platforms, sellers and team."
       />
-      <AnalyticsChartsLoader data={data} />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <AnalyticsChartsLoader data={data} />
+        </div>
+        <div>
+          <PipelineFunnel opportunities={opportunities} currency={currency} />
+        </div>
+      </div>
     </div>
   );
 }

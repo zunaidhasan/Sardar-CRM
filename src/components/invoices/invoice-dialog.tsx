@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import type { Client, InvoiceStatus, Project } from "@/lib/types";
+import type { Client, InvoiceStatus, Project, RecurringFrequency } from "@/lib/types";
 
 export interface InvoiceDialogProps {
   open: boolean;
@@ -47,11 +47,15 @@ export function InvoiceDialog({
   const [selectedProjectId, setSelectedProjectId] = React.useState<string>("");
   const [amount, setAmount] = React.useState(0);
   const [invoiceNumber, setInvoiceNumber] = React.useState("");
+  const [isRecurring, setIsRecurring] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
     const year = new Date().getFullYear();
-    setInvoiceNumber(`INV-${year}-${String(Date.now()).slice(-3)}`);
+    // Use a random suffix to avoid collision when multiple invoices
+    // are created in quick succession (same millisecond).
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    setInvoiceNumber(`INV-${year}-${rand}`);
   }, [open]);
 
   function handleProjectChange(projectId: string) {
@@ -164,6 +168,42 @@ export function InvoiceDialog({
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" placeholder="Payment details, milestones covered..." />
             </div>
+          </div>
+
+          {/* Recurring invoice option */}
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="rounded border-input"
+              />
+              Make this a recurring invoice
+            </label>
+            {isRecurring && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Frequency</Label>
+                  <Select name="recurring_frequency" defaultValue="monthly">
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Max runs (optional)</Label>
+                  <Input type="number" name="recurring_max_runs" min={1} placeholder="Unlimited" />
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

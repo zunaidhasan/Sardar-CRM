@@ -3,7 +3,9 @@ import { Suspense } from "react";
 import { requireUser, fetchProjects, fetchClients, fetchTimeEntries } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { ProjectsList } from "@/components/projects/projects-list";
-import { Skeleton } from "@/components/ui/skeleton";
+import { GenericExportButton } from "@/components/generic-export-button";
+import { PROJECT_COLUMNS } from "@/lib/generic-export";
+import { TableSkeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = {
   title: "Projects & Orders",
@@ -26,8 +28,9 @@ export default async function ProjectsPage() {
       <PageHeader
         title="Projects & Orders"
         description="Your monthly order tracking — deadlines, fees, developers and milestones."
+        actions={<GenericExportButton data={projects} columns={PROJECT_COLUMNS} filename="projects" />}
       />
-      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <Suspense fallback={<TableSkeleton rows={5} cols={7} />}>
         <ProjectsList
           projects={projects}
           clients={clients}

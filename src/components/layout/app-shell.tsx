@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { AppLogo } from "@/components/layout/app-logo";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { GlobalSearch } from "@/components/global-search";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TeamRole } from "@/lib/types";
@@ -18,9 +19,13 @@ interface AppShellProps {
 
 export function AppShell({ children, userName, avatarUrl, isDemo, role }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Global search */}
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r bg-sidebar lg:block">
         <AppSidebar userName={userName} avatarUrl={avatarUrl} isDemo={isDemo} role={role} />
@@ -59,6 +64,20 @@ export function AppShell({ children, userName, avatarUrl, isDemo, role }: AppShe
           <AppLogo size="sm" />
           <span className="text-sm font-semibold">Sardar CRM</span>
         </div>      </header>
+
+      {/* Desktop search trigger */}
+      <div className="fixed right-4 top-3 z-30 hidden lg:block">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 text-muted-foreground"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="text-xs">Search...</span>
+          <kbd className="pointer-events-none rounded border bg-muted px-1 py-0.5 text-[10px]">⌘K</kbd>
+        </Button>
+      </div>
 
       <div
         className={cn(

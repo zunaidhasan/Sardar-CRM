@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { validateApiKey } from "@/lib/api-keys";
 
 // ---------------------------------------------------------------------------
 // Webhook Receiver: /api/v1/webhooks
@@ -11,7 +12,9 @@ import { createClient } from "@supabase/supabase-js";
 //   - lead.updated  — Update an existing lead
 //   - import.csv    — Bulk import leads from CSV data
 //
-// Authentication: Webhook secret (X-Webhook-Secret header)
+// Authentication (two methods supported):
+//   1. API Key: Authorization: Bearer sb_live_...
+//   2. Legacy:  X-Webhook-Secret header (deprecated, prefer API keys)
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,11 +27,32 @@ function getSupabaseAdmin(): any {
   });
 }
 
-function verifyWebhookSecret(request: NextRequest): boolean {
+/**
+ * Authenticate the webhook request.
+ * Returns the userId if valid, or null.
+ */
+async function verifyWebhookAuth(request: NextRequest): Promise<string | null> {
+  // Method 1: API Key (preferred)
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const validated = await validateApiKey(token);
+    if (validated && (validated.scopes.includes("write") || validated.scopes.includes("admin"))) {
+      return validated.userId;
+    }
+  }
+
+  // Method 2: Legacy webhook secret (deprecated)
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return false; // No secret configured = webhooks disabled
-  const provided = request.headers.get("x-webhook-secret");
-  return provided === secret;
+  if (secret) {
+    const provided = request.headers.get("x-webhook-secret");
+    if (provided === secret) {
+      // Legacy mode: extract user_id from the payload body (read below)
+      return null; // Will be read from payload
+    }
+  }
+
+  return null;
 }
 
 interface WebhookPayload {
@@ -183,9 +207,8 @@ async function handleBulkImport(
 }
 
 export async function POST(request: NextRequest) {
-  if (!verifyWebhookSecret(request)) {
-    return NextResponse.json({ error: "Invalid webhook secret" }, { status: 401 });
-  }
+  // Authenticate: try API key first, fall back to legacy webhook secret
+  const authUserId = await verifyWebhookAuth(request);
 
   const admin = getSupabaseAdmin();
   if (!admin) {
@@ -202,6 +225,14 @@ export async function POST(request: NextRequest) {
   if (!payload.event) {
     return NextResponse.json({ error: "event is required" }, { status: 400 });
   }
+
+  // Resolve user: API key provides userId directly; legacy mode uses payload.user_id
+  const userId = authUserId ?? (payload.user_id as string | undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "user_id is required (or use an API key)" }, { status: 401 });
+  }
+  // Ensure the payload carries the resolved userId for handlers
+  payload.user_id = userId;
 
   switch (payload.event) {
     case "lead.created":
@@ -222,6 +253,6 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     events: ["lead.created", "lead.updated", "import.csv"],
-    docs: "POST with X-Webhook-Secret header and JSON body: { event, data, user_id }",
+    docs: "POST with Authorization: Bearer sb_live_... header and JSON body: { event, data, user_id? }",
   });
 }

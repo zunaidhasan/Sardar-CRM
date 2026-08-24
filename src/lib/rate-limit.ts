@@ -136,3 +136,79 @@ export function recordOutboundAction(
   outboundHits.set(key, hits);
 }
 
+// ---------------------------------------------------------------------------
+// REST API rate limiting
+//
+// Protects /api/v1/* endpoints from abuse. Two layers:
+//   - per API key:  120 requests / 1 min  (generous for integrations)
+//   - per IP:       300 requests / 1 min  (stops distributed abuse)
+//
+// Returns 429 Too Many Requests with Retry-After header when exceeded.
+// ---------------------------------------------------------------------------
+
+const API_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  "api:key":   { max: 120, windowMs: 60 * 1000 },
+  "api:ip":    { max: 300, windowMs: 60 * 1000 },
+};
+
+const apiHits = new Map<string, number[]>();
+
+function pruneApi(key: string, now: number, windowMs: number): number[] {
+  const hits = (apiHits.get(key) ?? []).filter((t) => now - t < windowMs);
+  apiHits.set(key, hits);
+  return hits;
+}
+
+/**
+ * Check if an API request is allowed for the given key and/or IP.
+ * Pass the API key id (from validateApiKey) for per-key limiting,
+ * and the client IP for per-IP limiting.
+ */
+export function checkApiRateLimit(
+  keyId: string | null,
+  ip: string,
+): RateLimitResult {
+  const now = Date.now();
+
+  // Per-key check
+  if (keyId) {
+    const limit = API_LIMITS["api:key"];
+    const hits = pruneApi(`key:${keyId}`, now, limit.windowMs);
+    if (hits.length >= limit.max) {
+      const oldest = hits[0]!;
+      return {
+        allowed: false,
+        retryAfterSec: Math.max(1, Math.ceil((oldest + limit.windowMs - now) / 1000)),
+      };
+    }
+  }
+
+  // Per-IP check
+  const ipLimit = API_LIMITS["api:ip"];
+  const ipHits = pruneApi(`ip:${ip}`, now, ipLimit.windowMs);
+  if (ipHits.length >= ipLimit.max) {
+    const oldest = ipHits[0]!;
+    return {
+      allowed: false,
+      retryAfterSec: Math.max(1, Math.ceil((oldest + ipLimit.windowMs - now) / 1000)),
+    };
+  }
+
+  return { allowed: true, retryAfterSec: 0 };
+}
+
+/** Record an API request hit for rate limiting. */
+export function recordApiHit(keyId: string | null, ip: string): void {
+  const now = Date.now();
+  if (keyId) {
+    const limit = API_LIMITS["api:key"];
+    const hits = pruneApi(`key:${keyId}`, now, limit.windowMs);
+    hits.push(now);
+    apiHits.set(`key:${keyId}`, hits);
+  }
+  const ipLimit = API_LIMITS["api:ip"];
+  const ipHits = pruneApi(`ip:${ip}`, now, ipLimit.windowMs);
+  ipHits.push(now);
+  apiHits.set(`ip:${ip}`, ipHits);
+}
+

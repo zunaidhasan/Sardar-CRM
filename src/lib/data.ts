@@ -63,6 +63,29 @@ async function sb(): Promise<S> {
 
 const TEAM_ROLES: TeamRole[] = ["ceo", "executive", "developer", "designer"];
 
+/**
+ * Validate password strength. Enforces:
+ * - Minimum 8 characters
+ * - At least one uppercase letter
+ * - At least one lowercase letter
+ * - At least one number
+ * Throws with a user-friendly message if validation fails.
+ */
+function validatePasswordStrength(password: string): void {
+  if (!password || password.length < 8) {
+    throw new Error("Password must be at least 8 characters");
+  }
+  if (!/[A-Z]/.test(password)) {
+    throw new Error("Password must contain at least one uppercase letter");
+  }
+  if (!/[a-z]/.test(password)) {
+    throw new Error("Password must contain at least one lowercase letter");
+  }
+  if (!/[0-9]/.test(password)) {
+    throw new Error("Password must contain at least one number");
+  }
+}
+
 function isTeamRole(value: string | undefined | null): value is TeamRole {
   return !!value && (TEAM_ROLES as string[]).includes(value);
 }
@@ -305,9 +328,7 @@ export async function createUserAccount(
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
     throw new Error("Username must be 3-32 chars: letters, numbers, dots, dashes, underscores");
   }
-  if (!input.password || input.password.length < 6) {
-    throw new Error("Password must be at least 6 characters");
-  }
+  validatePasswordStrength(input.password);
   if (isDemoMode()) {
     if (demo.findUserByUsername(username)) throw new Error("Username already exists");
     return demo.createDemoUser({
@@ -363,9 +384,7 @@ export async function updateUserAccount(
   patch: { password?: string; is_active?: boolean; role?: TeamRole },
 ): Promise<AppUser | null> {
   await requireAgency(actor);
-  if (patch.password && patch.password.length < 6) {
-    throw new Error("Password must be at least 6 characters");
-  }
+  if (patch.password) validatePasswordStrength(patch.password);
   const demotesCeo = patch.is_active === false || (!!patch.role && patch.role !== "ceo");
   if (isDemoMode()) {
     if (demotesCeo) {

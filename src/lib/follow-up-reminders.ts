@@ -22,18 +22,28 @@ interface OverdueLead {
 export function findOverdueLeads(leads: Client[]): OverdueLead[] {
   const now = new Date();
   todayStart(now);
+  // Compare as YYYY-MM-DD strings to avoid timezone mismatches between
+  // local midnight (todayStart) and UTC midnight (new Date("YYYY-MM-DD")).
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const todayStr = `${y}-${m}-${d}`;
 
   return leads
     .filter((lead) => {
       if (!lead.next_follow_up_date) return false;
       if (lead.outreach_status === "Won" || lead.outreach_status === "Lost") return false;
-      const followUpDate = new Date(lead.next_follow_up_date);
-      return followUpDate <= now;
+      return lead.next_follow_up_date <= todayStr;
     })
     .map((lead) => {
-      const followUpDate = new Date(lead.next_follow_up_date!);
-      const diffMs = now.getTime() - followUpDate.getTime();
-      const daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      // Compute daysOverdue using string comparison to avoid timezone
+      // mismatches between local midnight and UTC midnight.
+      const leadDate = lead.next_follow_up_date!;
+      const leadParts = leadDate.split("-").map(Number);
+      const todayParts = todayStr.split("-").map(Number);
+      const leadTime = new Date(leadParts[0], leadParts[1] - 1, leadParts[2]).getTime();
+      const todayTime = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]).getTime();
+      const daysOverdue = Math.round((todayTime - leadTime) / (1000 * 60 * 60 * 24));
       return {
         id: lead.id,
         name: lead.name,

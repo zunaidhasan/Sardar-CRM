@@ -3,12 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { showUndoToast } from "@/lib/undo-toast";
 import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
   Circle,
   Clock,
+  GripVertical,
   Loader2,
   Plus,
   Trash2,
@@ -17,6 +19,20 @@ import {
   Globe,
   FolderKanban,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,6 +56,7 @@ import {
   toggleMilestoneAction,
   addMilestoneAction,
   deleteMilestoneAction,
+  reorderMilestonesAction,
   setProjectStatusAction,
   deleteProjectAction,
   updateProjectNotesAction,
@@ -82,13 +99,34 @@ export function ProjectDetail({
   const [notesDraft, setNotesDraft] = React.useState(project.notes ?? "");
   const [savingNotes, setSavingNotes] = React.useState(false);
 
-  const doneCount = project.milestones.filter((m) => m.status === "done").length;
+  // Milestone drag-and-drop state
+  const [milestones, setMilestones] = React.useState<Milestone[]>(
+    [...project.milestones].sort((a, b) => a.order_index - b.order_index)
+  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Keep milestones in sync when project data changes
+  React.useEffect(() => {
+    setMilestones([...project.milestones].sort((a, b) => a.order_index - b.order_index));
+  }, [project.milestones]);
+
+  const doneCount = milestones.filter((m) => m.status === "done").length;
   const cd = countdownLabel(project.delivery_deadline);
 
   async function handleToggle(m: Milestone) {
+    const previousStatus = m.status;
     const next = m.status === "done" ? "in_progress" : "done";
     const result = await toggleMilestoneAction(project.id, m.id, next);
-    if (!result.ok) toast.error(result.error);
+    if (result.ok) {
+      showUndoToast({
+        message: `Milestone marked as ${next === "done" ? "complete" : "incomplete"}`,
+        onUndo: async () => {
+          await toggleMilestoneAction(project.id, m.id, previousStatus);
+        },
+      });
+    } else {
+      toast.error(result.error);
+    }
   }
 
   async function handleAddMilestone(e: React.FormEvent) {
@@ -111,14 +149,38 @@ export function ProjectDetail({
     if (!result.ok) toast.error(result.error);
   }
 
+  function handleMilestoneDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = milestones.findIndex((m) => m.id === active.id);
+    const newIndex = milestones.findIndex((m) => m.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = [...milestones];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    setMilestones(reordered);
+
+    // Persist new order to server
+    reorderMilestonesAction(project.id, reordered.map((m) => m.id));
+  }
+
   async function handleStatusChange(value: string) {
+    const previousStatus = status;
     setStatus(value as ProjectStatus);
     const result = await setProjectStatusAction(project.id, value as ProjectStatus);
     if (!result.ok) {
-      setStatus(project.status);
+      setStatus(previousStatus);
       toast.error(result.error);
     } else {
-      toast.success(`Status updated`);
+      showUndoToast({
+        message: `Status changed to ${PROJECT_STATUS_META[value as ProjectStatus]?.label ?? value}`,
+        onUndo: async () => {
+          setStatus(previousStatus);
+          await setProjectStatusAction(project.id, previousStatus);
+        },
+      });
     }
   }
 
@@ -192,56 +254,25 @@ export function ProjectDetail({
             <CardContent>
               <Progress value={project.progress} className="mb-5" />
 
-              <div className="space-y-1">
-                {project.milestones.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No milestones yet — break the work down.
-                  </p>
-                )}
-                {project.milestones
-                  .sort((a, b) => a.order_index - b.order_index)
-                  .map((m) => {
-                    const done = m.status === "done";
-                    return (
-                      <div
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleMilestoneDragEnd}>
+                <SortableContext items={milestones.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1">
+                    {milestones.length === 0 && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">
+                        No milestones yet — break the work down.
+                      </p>
+                    )}
+                    {milestones.map((m) => (
+                      <SortableMilestoneItem
                         key={m.id}
-                        className="group flex items-center gap-3 rounded-lg border p-2.5 transition-colors hover:bg-accent/40"
-                      >
-                        <button
-                          onClick={() => handleToggle(m)}
-                          className="shrink-0"
-                          aria-label={done ? "Mark incomplete" : "Mark complete"}
-                        >
-                          {done ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                          ) : m.status === "in_progress" ? (
-                            <Circle className="h-5 w-5 text-amber-500" />
-                          ) : (
-                            <Circle className="h-5 w-5 text-muted-foreground" />
-                          )}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <p className={cn("text-sm font-medium", done && "text-muted-foreground line-through")}>
-                            {m.title}
-                          </p>
-                          {m.due_date && (
-                            <p className="text-xs text-muted-foreground">{formatDate(m.due_date)}</p>
-                          )}
-                        </div>
-                        <span className="hidden text-xs text-muted-foreground sm:block">
-                          {(MILESTONE_STATUS_META[m.status] ?? { label: "Unknown" }).label}
-                        </span>
-                        <button
-                          onClick={() => handleRemoveMilestone(m)}
-                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                          aria-label="Delete milestone"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
+                        milestone={m}
+                        onToggle={handleToggle}
+                        onRemove={handleRemoveMilestone}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
 
               <form onSubmit={handleAddMilestone} className="mt-4 flex gap-2">
                 <Input
@@ -435,6 +466,89 @@ function DetailRow({
           {value}
         </span>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sortable Milestone Item (drag-and-drop)
+// ---------------------------------------------------------------------------
+
+function SortableMilestoneItem({
+  milestone,
+  onToggle,
+  onRemove,
+}: {
+  milestone: Milestone;
+  onToggle: (m: Milestone) => void;
+  onRemove: (m: Milestone) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: milestone.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  const done = milestone.status === "done";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group flex items-center gap-3 rounded-lg border p-2.5 transition-colors hover:bg-accent/40",
+        isDragging && "shadow-lg ring-2 ring-primary/20",
+      )}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <button
+        onClick={() => onToggle(milestone)}
+        className="shrink-0"
+        aria-label={done ? "Mark incomplete" : "Mark complete"}
+      >
+        {done ? (
+          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+        ) : milestone.status === "in_progress" ? (
+          <Circle className="h-5 w-5 text-amber-500" />
+        ) : (
+          <Circle className="h-5 w-5 text-muted-foreground" />
+        )}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className={cn("text-sm font-medium", done && "text-muted-foreground line-through")}>
+          {milestone.title}
+        </p>
+        {milestone.due_date && (
+          <p className="text-xs text-muted-foreground">{formatDate(milestone.due_date)}</p>
+        )}
+      </div>
+      <span className="hidden text-xs text-muted-foreground sm:block">
+        {(MILESTONE_STATUS_META[milestone.status] ?? { label: "Unknown" }).label}
+      </span>
+      <button
+        onClick={() => onRemove(milestone)}
+        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+        aria-label="Delete milestone"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </div>
   );
 }
