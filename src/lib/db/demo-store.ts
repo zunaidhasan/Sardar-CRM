@@ -32,6 +32,7 @@ import type {
   Profile,
   Project,
   ProjectCredential,
+  ProjectExpense,
   ProjectTeamMember,
   ProjectTodo,
   TeamMember,
@@ -54,6 +55,7 @@ export interface DemoDB {
   milestones: Milestone[];
   project_todos: ProjectTodo[];
   project_credentials: ProjectCredential[];
+  project_expenses: ProjectExpense[];
   project_team_members: ProjectTeamMember[];
   time_entries: TimeEntry[];
   activities: Activity[];
@@ -670,6 +672,28 @@ export function getAutomations(_userId: string): AutomationRule[] {
   // Automation rules are workspace-level resources shared by every login.
   return loadDB().automation_rules;
 }
+export function getProjectExpenses(userId: string, projectId: string): ProjectExpense[] {
+  const db = loadDB();
+  let rows = db.project_expenses.filter((e) => e.project_id === projectId);
+  const role = personaRoleForSession(userId);
+  if (role) {
+    const pIds = ownedProjectIds(userId);
+    rows = rows.filter((e) => e.user_id === userId || pIds.has(e.project_id));
+  }
+  return rows;
+}
+
+export function getAllExpenses(userId: string): ProjectExpense[] {
+  const db = loadDB();
+  let rows = db.project_expenses;
+  const role = personaRoleForSession(userId);
+  if (role) {
+    const pIds = ownedProjectIds(userId);
+    rows = rows.filter((e) => e.user_id === userId || pIds.has(e.project_id));
+  }
+  return rows;
+}
+
 export function getImportRuns(_userId: string): ImportRun[] {
   // Import audit history is workspace-level.
   return loadDB().import_runs;

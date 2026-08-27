@@ -36,6 +36,7 @@ import type {
   Project,
   ProjectCredential,
   ProjectStatus,
+  ProjectExpense,
   ProjectTeamMember,
   ProjectTodo,
   TeamMember,
@@ -825,6 +826,7 @@ export interface ProjectWithWorkspace extends Project {
   milestones: Milestone[];
   todos: ProjectTodo[];
   credentials: ProjectCredential[];
+  expenses: ProjectExpense[];
   team: ProjectTeamMember[];
   time_entries: TimeEntry[];
 }
@@ -841,6 +843,7 @@ export async function fetchProject(
       milestones: demo.getMilestones(userId, id),
       todos: demo.getProjectTodos(userId, id),
       credentials: demo.getProjectCredentials(userId, id),
+      expenses: demo.getProjectExpenses(userId, id),
       team: demo.getProjectTeamMembers(userId, id),
       time_entries: demo.getTimeEntries(userId, id),
     };
@@ -855,17 +858,19 @@ export async function fetchProject(
     .maybeSingle();
   if (!data) return null;
   const project = data as unknown as Project;
-  const [todos, credentials, team, time_entries] = await Promise.all([
+  const [todos, credentials, team, time_entries, expenses] = await Promise.all([
     fetchProjectTodos(userId, id),
     fetchProjectCredentials(userId, id),
     fetchProjectTeam(userId, id),
     fetchProjectTimeEntries(userId, id),
+    fetchProjectExpenses(userId, id),
   ]);
   return {
     ...project,
     milestones: (project as ProjectWithWorkspace).milestones ?? [],
     todos,
     credentials,
+    expenses,
     team,
     time_entries,
   };
@@ -1479,6 +1484,73 @@ export async function deleteInvoice(userId: string, id: string): Promise<boolean
   const client = await sb();
   if (!client) return false;
   const { error } = await client.from("invoices").delete().eq("user_id", userId).eq("id", id);
+  return !error;
+}
+
+// ---------------------------------------------------------------------------
+// Project Expenses (cost tracking for accurate profit calculation)
+// ---------------------------------------------------------------------------
+export type ProjectExpenseInput = Omit<ProjectExpense, "id" | "user_id" | "created_at" | "updated_at">;
+
+export async function fetchProjectExpenses(userId: string, projectId: string): Promise<ProjectExpense[]> {
+  if (isDemoMode()) return demo.getProjectExpenses(userId, projectId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("project_expenses")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("date", { ascending: false });
+  return (data ?? []) as ProjectExpense[];
+}
+
+export async function fetchAllExpenses(userId: string): Promise<ProjectExpense[]> {
+  if (isDemoMode()) return demo.getAllExpenses(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("project_expenses")
+    .select("*")
+    .eq("user_id", userId)
+    .order("date", { ascending: false });
+  return (data ?? []) as ProjectExpense[];
+}
+
+export async function createProjectExpense(userId: string, input: ProjectExpenseInput): Promise<ProjectExpense | null> {
+  const row = { ...input, user_id: userId };
+  if (isDemoMode()) {
+    return demo.insert("project_expenses", row as unknown as ProjectExpense);
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client.from("project_expenses").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as ProjectExpense;
+}
+
+export async function updateProjectExpense(userId: string, id: string, patch: Partial<ProjectExpense>): Promise<ProjectExpense | null> {
+  if (isDemoMode()) {
+    demo.updateById("project_expenses", id, patch);
+    return demo.loadDB().project_expenses.find((e) => e.id === id) ?? null;
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("project_expenses")
+    .update(patch)
+    .eq("user_id", userId)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ProjectExpense;
+}
+
+export async function deleteProjectExpense(userId: string, id: string): Promise<boolean> {
+  if (isDemoMode()) return demo.removeById("project_expenses", id);
+  const client = await sb();
+  if (!client) return false;
+  const { error } = await client.from("project_expenses").delete().eq("user_id", userId).eq("id", id);
   return !error;
 }
 

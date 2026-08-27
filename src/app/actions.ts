@@ -517,6 +517,76 @@ export async function removeProjectTeamMemberAction(
 }
 
 // ---------------------------------------------------------------------------
+// Project Expenses (cost tracking)
+// ---------------------------------------------------------------------------
+export async function addProjectExpenseAction(
+  projectId: string,
+  input: {
+    description: string;
+    amount: number;
+    currency: string;
+    category: string;
+    vendor?: string | null;
+    date: string;
+    is_billable?: boolean;
+    notes?: string | null;
+  },
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    const expense = await data.createProjectExpense(user.id, {
+      project_id: projectId,
+      description: input.description,
+      amount: input.amount,
+      currency: input.currency,
+      category: input.category as never,
+      vendor: input.vendor ?? null,
+      date: input.date,
+      is_billable: input.is_billable ?? true,
+      receipt_url: null,
+      notes: input.notes ?? null,
+    });
+    if (!expense) return { ok: false, error: "Failed to add expense" };
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    return { ok: true, data: expense };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to add expense" };
+  }
+}
+
+export async function updateProjectExpenseAction(
+  projectId: string,
+  id: string,
+  patch: Partial<import("@/lib/types").ProjectExpense>,
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.updateProjectExpense(user.id, id, patch);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update expense" };
+  }
+}
+
+export async function deleteProjectExpenseAction(
+  projectId: string,
+  id: string,
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.deleteProjectExpense(user.id, id);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete expense" };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Invoices
 // ---------------------------------------------------------------------------
 export async function createInvoiceAction(

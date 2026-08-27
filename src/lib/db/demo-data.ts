@@ -15,6 +15,7 @@ import type {
   Profile,
   Project,
   ProjectCredential,
+  ProjectExpense,
   ProjectTeamMember,
   ProjectTodo,
   TeamMember,
@@ -510,6 +511,7 @@ export function buildDemoData(): {
   milestones: Milestone[];
   project_todos: ProjectTodo[];
   project_credentials: ProjectCredential[];
+  project_expenses: ProjectExpense[];
   project_team_members: ProjectTeamMember[];
   time_entries: TimeEntry[];
   activities: Activity[];
@@ -886,6 +888,16 @@ export function buildDemoData(): {
     { id: ID.imports[1]!, user_id: DEMO_USER_ID, entity_type: "opportunities", file_name: "bids-upwork-2026.csv", total_rows: 30, imported_rows: 28, failed_rows: 2, log: [{ row: 17, error: "Missing title" }, { row: 23, error: "Invalid stage" }], created_at: d(-26) },
   ];
 
+  // Demo project expenses for accurate profit tracking
+  const project_expenses: ProjectExpense[] = [
+    { id: "exp-001", user_id: DEMO_USER_ID, project_id: allProjects[0]?.id ?? "prj-001", description: "Elementor Pro License", amount: 49, currency: "USD", category: "plugin", vendor: "Elementor", date: d(-45).slice(0, 10), is_billable: true, receipt_url: null, notes: "Annual license renewal", created_at: d(-45), updated_at: d(-45) },
+    { id: "exp-002", user_id: DEMO_USER_ID, project_id: allProjects[0]?.id ?? "prj-001", description: "Subcontractor – Logo Design", amount: 150, currency: "USD", category: "subcontractor", vendor: "Freelancer", date: d(-40).slice(0, 10), is_billable: true, receipt_url: null, notes: "Logo and brand identity package", created_at: d(-40), updated_at: d(-40) },
+    { id: "exp-003", user_id: DEMO_USER_ID, project_id: allProjects[1]?.id ?? "prj-002", description: "Stock Photos – Unsplash Pro", amount: 12, currency: "USD", category: "stock", vendor: "Unsplash", date: d(-30).slice(0, 10), is_billable: false, receipt_url: null, notes: null, created_at: d(-30), updated_at: d(-30) },
+    { id: "exp-004", user_id: DEMO_USER_ID, project_id: allProjects[2]?.id ?? "prj-003", description: "VPS Hosting – 3 months", amount: 36, currency: "USD", category: "hosting", vendor: "DigitalOcean", date: d(-20).slice(0, 10), is_billable: true, receipt_url: null, notes: "Client project hosting", created_at: d(-20), updated_at: d(-20) },
+    { id: "exp-005", user_id: DEMO_USER_ID, project_id: allProjects[3]?.id ?? "prj-004", description: "Subcontractor – Frontend Dev", amount: 500, currency: "USD", category: "subcontractor", vendor: "Rafi Ahmed", date: d(-15).slice(0, 10), is_billable: true, receipt_url: null, notes: "React component development (40h @ $12.50/h)", created_at: d(-15), updated_at: d(-15) },
+    { id: "exp-006", user_id: DEMO_USER_ID, project_id: allProjects[1]?.id ?? "prj-002", description: "Figma Design Assets", amount: 25, currency: "USD", category: "design", vendor: "Figma", date: d(-25).slice(0, 10), is_billable: false, receipt_url: null, notes: null, created_at: d(-25), updated_at: d(-25) },
+  ];
+
   return {
     demo_version: DEMO_DB_VERSION,
     profile,
@@ -898,6 +910,7 @@ export function buildDemoData(): {
     milestones: allMilestones,
     project_todos,
     project_credentials,
+    project_expenses,
     project_team_members: allProjectTeam,
     time_entries: allTimeEntries,
     activities,

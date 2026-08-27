@@ -444,6 +444,47 @@ export interface SequenceEnrollmentRow {
 }
 
 // ---------------------------------------------------------------------------
+// Project Expenses (cost tracking)
+// ---------------------------------------------------------------------------
+
+export type ExpenseCategory = "plugin" | "hosting" | "subcontractor" | "design" | "stock" | "other";
+
+export interface ProjectExpense {
+  id: string;
+  user_id: string;
+  project_id: string;
+  description: string;
+  amount: number;
+  currency: string;
+  category: ExpenseCategory;
+  vendor: string | null;
+  date: string; // YYYY-MM-DD
+  is_billable: boolean;
+  receipt_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Notification Webhooks (Slack / WhatsApp / Custom)
+// ---------------------------------------------------------------------------
+
+export type WebhookEventType = "lead.created" | "deal.won" | "invoice.paid" | "project.created" | "invoice.overdue";
+
+export interface WebhookConfig {
+  id: string;
+  user_id: string;
+  name: string;
+  type: "slack" | "whatsapp" | "custom";
+  url: string;
+  is_active: boolean;
+  events: WebhookEventType[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // API Keys
 // ---------------------------------------------------------------------------
 

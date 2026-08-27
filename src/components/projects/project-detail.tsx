@@ -18,6 +18,7 @@ import {
   Users,
   Globe,
   FolderKanban,
+  Brain,
 } from "lucide-react";
 import {
   DndContext,
@@ -41,6 +42,8 @@ import { Progress } from "@/components/ui/progress";
 import { ProjectStatusBadge } from "@/components/status-badges";
 import { ProjectTodos } from "@/components/projects/project-todos";
 import { ProjectCredentials } from "@/components/projects/project-credentials";
+import { ProjectExpenses } from "@/components/projects/project-expenses";
+import { MeetingSummarizer } from "@/components/outbound/meeting-summarizer";
 import { ProjectTeam } from "@/components/projects/project-team";
 import { TimeTracking } from "@/components/projects/time-tracking";
 import {
@@ -65,6 +68,7 @@ import type {
   Milestone,
   Project,
   ProjectCredentialView,
+  ProjectExpense,
   ProjectStatus,
   ProjectTeamMember,
   ProjectTodo,
@@ -76,6 +80,7 @@ export interface ProjectDetailData extends Project {
   milestones: Milestone[];
   todos: ProjectTodo[];
   credentials: ProjectCredentialView[];
+  expenses: ProjectExpense[];
   team: ProjectTeamMember[];
   time_entries: TimeEntry[];
   client_name?: string | null;
@@ -297,6 +302,48 @@ export function ProjectDetail({
             entries={project.time_entries}
             teamMembers={teamMembers}
           />
+
+          {/* Expenses */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Expenses & Costs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProjectExpenses
+                projectId={project.id}
+                expenses={project.expenses ?? []}
+                currency={currency}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Meeting Summarizer */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4 text-violet-500" />
+                AI Meeting Summarizer
+              </CardTitle>
+              <MeetingSummarizer
+                projectId={project.id}
+                projectName={project.project_name}
+                clientName={project.client_name ?? undefined}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Brain className="mr-1 h-3.5 w-3.5" />
+                    Summarize Meeting
+                  </Button>
+                }
+              />
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Paste a meeting transcript and the AI will extract a summary,
+                action items, and key decisions. Action items can be added directly
+                as project to-dos.
+              </p>
+            </CardContent>
+          </Card>
 
           {/* Notes (editable) */}
           <Card>

@@ -264,3 +264,15 @@ export const FOLLOW_UP_SCHEDULE = [
   { after: 7, label: "Follow-up 2" },   // 7-8 days after follow-up 1
   { after: 13, label: "Break-up" },      // 12-14 days after follow-up 2
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Expense categories (cost tracking)
+// ---------------------------------------------------------------------------
+export const EXPENSE_CATEGORY_META: Record<string, { label: string; icon: string; color: string }> = {
+  plugin: { label: "Plugin/Software", icon: "Puzzle", color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" },
+  hosting: { label: "Hosting/Domain", icon: "Server", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+  subcontractor: { label: "Subcontractor", icon: "Users", color: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
+  design: { label: "Design Assets", icon: "Palette", color: "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300" },
+  stock: { label: "Stock/Media", icon: "Image", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
+  other: { label: "Other", icon: "MoreHorizontal", color: "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400" },
+};
