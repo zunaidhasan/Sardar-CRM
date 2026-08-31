@@ -1,7 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, formatCurrency, formatShortDate, countdownLabel } from "@/lib/utils";
 import { STAGE_META, PLATFORM_META, BID_STATUS_META } from "@/lib/constants";
+import { calculateOpportunityWinScore } from "@/lib/deal-scoring";
 import type { Opportunity } from "@/lib/types";
 
 export type KanbanOpp = Opportunity & { client_name?: string | null };
@@ -27,6 +28,12 @@ export function KanbanCard({ opportunity: opp, onEdit, onDelete }: KanbanCardPro
 
   const platformMeta = PLATFORM_META[opp.platform];
   const followUp = opp.next_follow_up ? countdownLabel(opp.next_follow_up) : null;
+  const winScore = calculateOpportunityWinScore(opp, {
+    proposal_length: opp.description?.length ?? 320,
+    response_window_hours: opp.next_follow_up ? 36 : 72,
+    historical_win_rate: 58,
+    client_name: opp.client_id ? "Client" : null,
+  });
 
   return (
     <div
@@ -115,6 +122,16 @@ export function KanbanCard({ opportunity: opp, onEdit, onDelete }: KanbanCardPro
             {opp.connects_spent}c
           </span>
         )}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between rounded-md border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 font-medium text-foreground">
+          <Sparkles className="h-3 w-3 text-violet-500" />
+          Win score
+        </span>
+        <span className={cn("font-semibold", winScore.score >= 75 ? "text-emerald-600" : winScore.score >= 45 ? "text-amber-600" : "text-rose-600")}>
+          {winScore.score}%
+        </span>
       </div>
 
       {opp.client_name && (

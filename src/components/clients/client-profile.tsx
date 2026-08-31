@@ -50,6 +50,7 @@ export interface ClientProfileData extends Client {
 import { CopyPersonalizedEmail } from "@/components/outbound/copy-personalized-email";
 import { LeadScoreBreakdown } from "@/components/outbound/lead-score-breakdown";
 import { AuditLogPanel } from "@/components/outbound/audit-log-panel";
+import { AIReplyAssistant } from "@/components/outbound/ai-reply-assistant";
 import { getAuditLog } from "@/lib/audit-log";
 import type { EmailTemplate } from "@/lib/types";
 
@@ -175,8 +176,28 @@ export function ClientProfile({
         <TabsContent value="details">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-base">Contact info</CardTitle>
+                <AIReplyAssistant
+                  originalMessage={
+                    client.notes && client.notes.trim()
+                      ? client.notes
+                      : `Hi ${client.name},\n\nWe are following up on the project conversation about ${client.company ?? "your project"}.`
+                  }
+                  clientName={client.name}
+                  projectName={client.projects[0]?.project_name ?? client.company ?? "your project"}
+                  context={
+                    client.opportunities.length > 0
+                      ? `Recent deal: ${client.opportunities[0]?.title ?? ""}. ${client.opportunities[0]?.notes ?? ""}`
+                      : "Client relationship context includes agency communications and prior project notes."
+                  }
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Send className="mr-1 h-3.5 w-3.5" />
+                      AI Draft Reply
+                    </Button>
+                  }
+                />
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <InfoRow icon={Mail} label="Email" value={client.email ?? "—"} />
