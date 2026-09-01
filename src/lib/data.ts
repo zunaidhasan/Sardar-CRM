@@ -255,16 +255,22 @@ export async function loginWithUsername(
   const admin = createSupabaseAdmin(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data: profile } = await admin
+  const { data: profile, error: profileErr } = await admin
     .from("profiles")
     .select("id, is_active")
     .eq("username", name)
     .maybeSingle();
+  if (profileErr) {
+    return { ok: false, error: `Profile lookup failed: ${profileErr.message}` };
+  }
   if (!profile) return { ok: false, error: "Unknown username" };
   // Resolve the auth email from auth.users (the profiles table has no email column).
-  const { data: authUser } = await admin.auth.admin.getUserById(profile.id as string);
+  const { data: authUser, error: authErr } = await admin.auth.admin.getUserById(profile.id as string);
+  if (authErr) {
+    return { ok: false, error: `Auth lookup failed: ${authErr.message}` };
+  }
   const email = authUser?.user?.email;
-  if (!email) return { ok: false, error: "Unknown username" };
+  if (!email) return { ok: false, error: "No email found for this account" };
   if (profile.is_active === false) {
     return { ok: false, error: "This account has been deactivated by agency management" };
   }
