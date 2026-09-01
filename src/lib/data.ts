@@ -257,17 +257,21 @@ export async function loginWithUsername(
   });
   const { data: profile } = await admin
     .from("profiles")
-    .select("id, email, is_active")
+    .select("id, is_active")
     .eq("username", name)
     .maybeSingle();
-  if (!profile || !profile.email) return { ok: false, error: "Unknown username" };
+  if (!profile) return { ok: false, error: "Unknown username" };
+  // Resolve the auth email from auth.users (the profiles table has no email column).
+  const { data: authUser } = await admin.auth.admin.getUserById(profile.id as string);
+  const email = authUser?.user?.email;
+  if (!email) return { ok: false, error: "Unknown username" };
   if (profile.is_active === false) {
     return { ok: false, error: "This account has been deactivated by agency management" };
   }
   const client = await sb();
   if (!client) return { ok: false, error: "Authentication is not configured" };
   const { error } = await client.auth.signInWithPassword({
-    email: profile.email,
+    email,
     password,
   });
   if (error) {
@@ -298,7 +302,7 @@ export async function fetchUsers(): Promise<AppUser[]> {
   });
   const [authRes, profilesRes] = await Promise.all([
     admin.auth.admin.listUsers({ perPage: 1000 }),
-    admin.from("profiles").select("id, username, email, role, full_name, is_active, created_at, updated_at"),
+    admin.from("profiles").select("id, username, role, full_name, is_active, created_at, updated_at"),
   ]);
   const profiles = (profilesRes.data ?? []) as Array<Record<string, unknown>>;
   const byId = new Map(profiles.map((p) => [String(p.id), p]));
