@@ -256,20 +256,13 @@ export async function loginWithUsername(
     auth: { autoRefreshToken: false, persistSession: false },
   });
   const { data: profile, error: profileErr } = await admin
-    .from("profiles")
-    .select("id, is_active")
-    .eq("username", name)
-    .maybeSingle();
+    .rpc("get_profile_by_username", { p_username: name })
+    .maybeSingle<{ profile_id: string; is_active: boolean; email: string | null }>();
   if (profileErr) {
     return { ok: false, error: `Profile lookup failed: ${profileErr.message}` };
   }
   if (!profile) return { ok: false, error: "Unknown username" };
-  // Resolve the auth email from auth.users (the profiles table has no email column).
-  const { data: authUser, error: authErr } = await admin.auth.admin.getUserById(profile.id as string);
-  if (authErr) {
-    return { ok: false, error: `Auth lookup failed: ${authErr.message}` };
-  }
-  const email = authUser?.user?.email;
+  const email = profile.email;
   if (!email) return { ok: false, error: "No email found for this account" };
   if (profile.is_active === false) {
     return { ok: false, error: "This account has been deactivated by agency management" };
@@ -367,9 +360,11 @@ export async function createUserAccount(
   });
   if (error) throw new Error(error.message);
   if (!created?.user) throw new Error("Failed to create user");
+  const emailAddr = input.email?.trim() || `${username}@sardarcrm.internal`;
   const { error: profileError } = await admin.from("profiles").insert({
     id: created.user.id,
     username,
+    email: emailAddr,
     full_name: input.name.trim(),
     role: input.role,
     currency: "USD",
