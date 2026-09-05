@@ -7,11 +7,14 @@ import {
   fetchInvoices,
   fetchClients,
   fetchTeamMembers,
+  fetchAllExpenses,
+  fetchTimeEntries,
 } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { AnalyticsChartsLoader } from "@/components/analytics/analytics-charts-loader";
 import { AdvancedAnalytics } from "@/components/analytics/advanced-analytics";
 import { PipelineFunnel } from "@/components/analytics/pipeline-funnel";
+import { ProfitabilityDashboard } from "@/components/analytics/profitability-dashboard";
 import type { AnalyticsSeries } from "@/components/analytics/analytics-charts";
 import { STAGE_META, CURRENCY_SYMBOL } from "@/lib/constants";
 
@@ -28,13 +31,15 @@ function monthLabel(date: string): string {
 
 export default async function AnalyticsPage() {
   const user = await requireUser();
-  const [projects, opportunities, accounts, invoices, clients, teamMembers] = await Promise.all([
+  const [projects, opportunities, accounts, invoices, clients, teamMembers, expenses, timeEntries] = await Promise.all([
     fetchProjects(user.id),
     fetchOpportunities(user.id),
     fetchAccounts(user.id),
     fetchInvoices(user.id),
     fetchClients(user.id),
     fetchTeamMembers(user.id),
+    fetchAllExpenses(user.id),
+    fetchTimeEntries(user.id),
   ]);
 
   const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -142,6 +147,14 @@ export default async function AnalyticsPage() {
         <div>
           <PipelineFunnel opportunities={opportunities} currency={currency} />
         </div>
+      </div>
+      <div className="mt-6">
+        <ProfitabilityDashboard
+          projects={projects}
+          expenses={expenses}
+          timeEntries={timeEntries}
+          currency={currency}
+        />
       </div>
       <div className="mt-6">
         <h2 className="text-lg font-semibold mb-4">Advanced Analytics</h2>

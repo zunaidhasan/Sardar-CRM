@@ -21,6 +21,9 @@ import type {
   TeamMember,
   TeamRole,
   TimeEntry,
+  ClientPortal,
+  PortalSignature,
+  WebhookConfig,
 } from "@/lib/types";
 import { hashPassword } from "@/lib/password";
 
@@ -522,6 +525,9 @@ export function buildDemoData(): {
   email_templates: EmailTemplate[];
   automation_rules: AutomationRule[];
   import_runs: ImportRun[];
+  client_portals: ClientPortal[];
+  portal_signatures: PortalSignature[];
+  notification_webhooks: WebhookConfig[];
 } {
   const profile: Profile = {
     id: DEMO_USER_ID,
@@ -921,5 +927,8 @@ export function buildDemoData(): {
     email_templates,
     automation_rules,
     import_runs,
+    client_portals: [],
+    portal_signatures: [],
+    notification_webhooks: [],
   };
 }

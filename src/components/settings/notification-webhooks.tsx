@@ -35,6 +35,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { useI18n } from "@/components/i18n-provider";
+import {
+  createWebhookAction,
+  deleteWebhookAction,
+  updateWebhookAction,
+} from "@/app/actions";
 import type { WebhookConfig, WebhookEventType } from "@/lib/types";
 
 const EVENT_OPTIONS: { value: WebhookEventType; label: string }[] = [
@@ -92,31 +97,18 @@ export function NotificationWebhooks({ webhooks, isDemo }: NotificationWebhooksP
     }
     setSaving(true);
     try {
-      // Store in localStorage for demo; in production this would be a server action
-      const newWebhook: WebhookConfig = {
-        id: `wh-${Date.now()}`,
-        user_id: "current",
+      const result = await createWebhookAction({
         name: name.trim(),
         type,
         url: url.trim(),
-        is_active: true,
         events,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      // Save to localStorage for demo persistence
-      const stored = JSON.parse(localStorage.getItem("sardar_webhooks") ?? "[]");
-      stored.push(newWebhook);
-      localStorage.setItem("sardar_webhooks", JSON.stringify(stored));
-
-      toast.success("Webhook added successfully");
+      });
+      if (!result.ok) throw new Error(result.error);
+      toast.success("Webhook added");
       resetForm();
       setOpen(false);
-      // Refresh the page to show the new webhook
-      window.location.reload();
     } catch (e) {
-      toast.error("Failed to add webhook");
+      toast.error(e instanceof Error ? e.message : "Failed to add webhook");
     } finally {
       setSaving(false);
     }
@@ -175,24 +167,15 @@ export function NotificationWebhooks({ webhooks, isDemo }: NotificationWebhooksP
     }
   }
 
-  function handleDelete(id: string) {
-    const stored = JSON.parse(localStorage.getItem("sardar_webhooks") ?? "[]");
-    localStorage.setItem(
-      "sardar_webhooks",
-      JSON.stringify(stored.filter((w: WebhookConfig) => w.id !== id)),
-    );
-    toast.success("Webhook removed");
-    window.location.reload();
+  async function handleDelete(id: string) {
+    const result = await deleteWebhookAction(id);
+    if (result.ok) toast.success("Webhook removed");
+    else toast.error(result.error);
   }
 
   async function handleToggle(webhook: WebhookConfig) {
-    const stored = JSON.parse(localStorage.getItem("sardar_webhooks") ?? "[]");
-    const idx = stored.findIndex((w: WebhookConfig) => w.id === webhook.id);
-    if (idx >= 0) {
-      stored[idx].is_active = !stored[idx].is_active;
-      localStorage.setItem("sardar_webhooks", JSON.stringify(stored));
-      window.location.reload();
-    }
+    const result = await updateWebhookAction(webhook.id, { is_active: !webhook.is_active });
+    if (!result.ok) toast.error(result.error);
   }
 
   return (

@@ -22,6 +22,7 @@ export type OutreachStatus = "New" | "Contacted" | "Replied" | "Meeting" | "Prop
 export interface Profile {
   id: string;
   username?: string | null;
+  email?: string | null;
   full_name: string | null;
   avatar_url: string | null;
   role: string;
@@ -499,4 +500,25 @@ export interface ApiKeyRow {
   last_used_at: string | null;
   created_at: string;
   expires_at: string | null;
+}
+
+export interface ClientPortal {
+  id: string;
+  user_id: string;
+  client_id: string;
+  project_id: string | null;
+  token: string;
+  is_active: boolean;
+  expires_at: string | null;
+  last_viewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortalSignature {
+  id: string;
+  portal_id: string;
+  signer_name: string;
+  signature_data: string;
+  signed_at: string;
 }

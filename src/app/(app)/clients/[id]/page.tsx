@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireUser, fetchClientWithRelations, fetchAttachmentsForEntity, fetchTemplates } from "@/lib/data";
+import { requireUser, fetchClientWithRelations, fetchAttachmentsForEntity, fetchTemplates, fetchClientPortals } from "@/lib/data";
 import { ClientProfile, type ClientProfileData } from "@/components/clients/client-profile";
 
 export const metadata: Metadata = {
@@ -10,15 +10,20 @@ export const metadata: Metadata = {
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
-  const [client, templates] = await Promise.all([
+  const [client, templates, portals] = await Promise.all([
     fetchClientWithRelations(user.id, id),
     fetchTemplates(user.id),
+    fetchClientPortals(user.id),
   ]);
   if (!client) notFound();
 
   const attachments = await fetchAttachmentsForEntity(user.id, "client", id);
 
-  const data: ClientProfileData = { ...client, attachments };
+  const data: ClientProfileData = {
+    ...client,
+    attachments,
+    portals: portals.filter((p) => p.client_id === id),
+  };
 
   return (
     <ClientProfile

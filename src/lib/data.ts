@@ -42,8 +42,12 @@ import type {
   TeamMember,
   TeamRole,
   TimeEntry,
+  ClientPortal,
+  PortalSignature,
+  WebhookConfig,
 } from "@/lib/types";
 import { verifyPassword } from "@/lib/password";
+import { createPortalToken, isPortalTokenValid } from "@/lib/portal";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import { activityActorName } from "@/lib/activity-feed";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
@@ -259,7 +263,15 @@ export async function loginWithUsername(
     .rpc("get_profile_by_username", { p_username: name })
     .maybeSingle<{ profile_id: string; is_active: boolean; email: string | null }>();
   if (profileErr) {
-    return { ok: false, error: `Profile lookup failed: ${profileErr.message}` };
+    const msg = profileErr.message ?? "";
+    if (/could not find the function|schema cache|does not exist/i.test(msg)) {
+      return {
+        ok: false,
+        error:
+          "Login RPC missing. Run supabase/schema.sql (or migrations/20260903_auth_rpc_and_portal.sql) in the SQL Editor, then redeploy.",
+      };
+    }
+    return { ok: false, error: `Profile lookup failed: ${msg}` };
   }
   if (!profile) return { ok: false, error: "Unknown username" };
   const email = profile.email;
@@ -356,12 +368,12 @@ export async function createUserAccount(
     email: input.email?.trim() || `${username}@sardarcrm.internal`,
     password: input.password,
     email_confirm: true,
-    user_metadata: { full_name: input.name.trim() },
+    user_metadata: { full_name: input.name.trim(), username },
   });
   if (error) throw new Error(error.message);
   if (!created?.user) throw new Error("Failed to create user");
   const emailAddr = input.email?.trim() || `${username}@sardarcrm.internal`;
-  const { error: profileError } = await admin.from("profiles").insert({
+  const { error: profileError } = await admin.from("profiles").upsert({
     id: created.user.id,
     username,
     email: emailAddr,
@@ -369,7 +381,8 @@ export async function createUserAccount(
     role: input.role,
     currency: "USD",
     default_fee_percent: 20,
-  });
+    is_active: true,
+  }, { onConflict: "id" });
   if (profileError) throw new Error(profileError.message);
   return {
     id: created.user.id,
@@ -591,6 +604,19 @@ export async function moveOpportunity(
   if (next) {
     await logActivity(userId, "opportunity", id, "status_change", `Deal moved to ${stage}`, opp.title);
     createdProjectId = await runStageAutomations(userId, next, stage);
+    if (stage === "won") {
+      try {
+        const hooks = await fetchNotificationWebhooks(userId);
+        const { fireEventWebhooks } = await import("@/lib/notification-webhooks");
+        await fireEventWebhooks(hooks, "deal.won", {
+          title: next.title,
+          amount: next.amount,
+          currency: next.currency,
+        });
+      } catch {
+        // webhook failures must never block the stage move
+      }
+    }
   }
   return { ok: Boolean(next), createdProjectId };
 }
@@ -605,6 +631,39 @@ async function runStageAutomations(
     (r) => r.is_active && r.trigger_event === "opportunity.stage_changed" && r.trigger_value === stage,
   );
   let createdProjectId: string | undefined;
+  const hasCreateProject = active.some((r) => r.action_type === "create_project");
+  if (stage === "won" && !hasCreateProject) {
+    const existing = (await fetchProjects(userId)).find((p) => p.opportunity_id === opp.id);
+    if (!existing) {
+      const project = await createProject(userId, {
+        opportunity_id: opp.id,
+        client_id: opp.client_id,
+        account_id: opp.account_id,
+        project_name: opp.title,
+        gross_amount: opp.amount,
+        fee_percent: 20,
+        fee_amount: Math.round(opp.amount * 0.2 * 100) / 100,
+        net_amount: Math.round(opp.amount * 0.8 * 100) / 100,
+        bonus: 0,
+        status: "wip",
+        priority: "medium",
+        progress: 0,
+        order_date: new Date().toISOString().slice(0, 10),
+        notes: "Auto-created when the deal moved to Won.",
+      });
+      createdProjectId = project?.id;
+      if (project) {
+        await logActivity(
+          userId,
+          "project",
+          project.id,
+          "system",
+          "Won-deal onboarding",
+          "Project created automatically from the won opportunity.",
+        );
+      }
+    }
+  }
   for (const rule of active) {
     if (rule.action_type === "create_project") {
       const name =
@@ -2256,4 +2315,202 @@ export async function fetchClientsForOwner(userId: string): Promise<Client[]> {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   return (data ?? []) as Client[];
+}
+
+// ---------------------------------------------------------------------------
+// Notification webhooks
+// ---------------------------------------------------------------------------
+export async function fetchNotificationWebhooks(userId: string): Promise<WebhookConfig[]> {
+  if (isDemoMode()) return demo.getNotificationWebhooks(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("notification_webhooks")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as WebhookConfig[];
+}
+
+export async function createNotificationWebhook(
+  userId: string,
+  input: Omit<WebhookConfig, "id" | "user_id" | "created_at" | "updated_at">,
+): Promise<WebhookConfig | null> {
+  const row = { ...input, user_id: userId };
+  if (isDemoMode()) {
+    return demo.insert("notification_webhooks", row as unknown as WebhookConfig);
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client.from("notification_webhooks").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as WebhookConfig;
+}
+
+export async function updateNotificationWebhook(
+  userId: string,
+  id: string,
+  patch: Partial<WebhookConfig>,
+): Promise<WebhookConfig | null> {
+  if (isDemoMode()) {
+    demo.updateById("notification_webhooks", id, patch);
+    return demo.getNotificationWebhooks(userId).find((w) => w.id === id) ?? null;
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("notification_webhooks")
+    .update(patch)
+    .eq("user_id", userId)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as WebhookConfig;
+}
+
+export async function deleteNotificationWebhook(userId: string, id: string): Promise<boolean> {
+  if (isDemoMode()) return demo.removeById("notification_webhooks", id);
+  const client = await sb();
+  if (!client) return false;
+  const { error } = await client
+    .from("notification_webhooks")
+    .delete()
+    .eq("user_id", userId)
+    .eq("id", id);
+  return !error;
+}
+
+// ---------------------------------------------------------------------------
+// Client portals (magic-link)
+// ---------------------------------------------------------------------------
+export async function fetchClientPortals(userId: string): Promise<ClientPortal[]> {
+  if (isDemoMode()) return demo.getClientPortals(userId);
+  const client = await sb();
+  if (!client) return [];
+  const { data } = await client
+    .from("client_portals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as ClientPortal[];
+}
+
+export async function createClientPortal(
+  userId: string,
+  input: { client_id: string; project_id?: string | null },
+): Promise<ClientPortal | null> {
+  const row = {
+    user_id: userId,
+    client_id: input.client_id,
+    project_id: input.project_id ?? null,
+    token: createPortalToken(),
+    is_active: true,
+    expires_at: null as string | null,
+    last_viewed_at: null as string | null,
+  };
+  if (isDemoMode()) {
+    return demo.insert("client_portals", row as unknown as ClientPortal);
+  }
+  const client = await sb();
+  if (!client) return null;
+  const { data, error } = await client.from("client_portals").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as ClientPortal;
+}
+
+export async function revokeClientPortal(userId: string, id: string): Promise<boolean> {
+  if (isDemoMode()) {
+    demo.updateById("client_portals", id, { is_active: false });
+    return true;
+  }
+  const client = await sb();
+  if (!client) return false;
+  const { error } = await client
+    .from("client_portals")
+    .update({ is_active: false })
+    .eq("user_id", userId)
+    .eq("id", id);
+  return !error;
+}
+
+export async function fetchPortalByToken(token: string): Promise<ClientPortal | null> {
+  if (!token) return null;
+  if (isDemoMode()) {
+    const portal = demo.getClientPortalByToken(token);
+    if (!portal || !isPortalTokenValid(portal)) return null;
+    return portal;
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+  const { createClient } = await import("@supabase/supabase-js");
+  const anon = createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await anon
+    .rpc("get_portal_by_token", { p_token: token })
+    .maybeSingle<{
+      portal_id: string;
+      client_id: string;
+      project_id: string | null;
+      user_id: string;
+      is_active: boolean;
+      expires_at: string | null;
+    }>();
+  if (error || !data) return null;
+  const portal: ClientPortal = {
+    id: data.portal_id,
+    user_id: data.user_id,
+    client_id: data.client_id,
+    project_id: data.project_id,
+    token,
+    is_active: data.is_active,
+    expires_at: data.expires_at,
+    last_viewed_at: null,
+    created_at: "",
+    updated_at: "",
+  };
+  if (!isPortalTokenValid(portal)) return null;
+  return portal;
+}
+
+export async function addPortalSignature(
+  portalId: string,
+  signerName: string,
+  signatureData: string,
+): Promise<PortalSignature | null> {
+  const row = {
+    portal_id: portalId,
+    signer_name: signerName,
+    signature_data: signatureData,
+  };
+  if (isDemoMode()) {
+    return demo.insert("portal_signatures", row as unknown as PortalSignature);
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return null;
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await admin.from("portal_signatures").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as PortalSignature;
+}
+
+export async function fetchPortalSignatures(portalId: string): Promise<PortalSignature[]> {
+  if (isDemoMode()) return demo.getPortalSignatures(portalId);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return [];
+  const admin = createSupabaseAdmin(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data } = await admin
+    .from("portal_signatures")
+    .select("*")
+    .eq("portal_id", portalId)
+    .order("signed_at", { ascending: false });
+  return (data ?? []) as PortalSignature[];
 }

@@ -93,6 +93,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE IF NOT EXISTS public.profiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username      text,                        -- agency-provided login name (username+password auth)
+  email         text,                        -- denormalized from auth.users for username login
   full_name     text,
   avatar_url    text,
   role          text NOT NULL DEFAULT 'owner',
@@ -103,6 +104,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Existing installs that ran an older schema.sql without the email column.
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+
 -- Usernames are matched case-insensitively at login, so enforce uniqueness
 -- on the lowercased value.
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower_idx
@@ -110,6 +114,52 @@ CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower_idx
 
 CREATE TRIGGER trg_profiles_updated_at BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- Username login lookup. Login is unauthenticated, so this must be
+-- SECURITY DEFINER and executable by the service role. search_path is
+-- pinned to block search-path injection on DEFINER functions.
+CREATE OR REPLACE FUNCTION public.get_profile_by_username(p_username text)
+RETURNS TABLE(profile_id uuid, is_active boolean, email text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p.id AS profile_id, p.is_active, p.email
+  FROM public.profiles p
+  WHERE lower(p.username) = lower(p_username)
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_profile_by_username(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_profile_by_username(text) TO service_role;
+
+-- Auto-create a profile row when a new auth user is provisioned so
+-- username login and RLS never see a dangling auth.users row.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, username)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1))
+  )
+  ON CONFLICT (id) DO UPDATE
+    SET email = COALESCE(EXCLUDED.email, public.profiles.email);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- 3.2 accounts -- multiple Fiverr/Upwork seller profiles
 CREATE TABLE IF NOT EXISTS public.accounts (
@@ -443,6 +493,136 @@ CREATE TABLE IF NOT EXISTS public.time_entries (
 CREATE TRIGGER trg_time_entries_updated_at BEFORE UPDATE ON public.time_entries
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- 3.19 project_expenses -- cost tracking for true profitability
+DO $$ BEGIN
+  CREATE TYPE public.expense_category AS ENUM (
+    'plugin', 'hosting', 'stock', 'subcontractor', 'design', 'other'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.project_expenses (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  project_id    uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  description   text NOT NULL,
+  amount        numeric(12,2) NOT NULL DEFAULT 0,
+  currency      text NOT NULL DEFAULT 'USD',
+  category      public.expense_category NOT NULL DEFAULT 'other',
+  vendor        text,
+  date          date NOT NULL DEFAULT CURRENT_DATE,
+  is_billable   boolean NOT NULL DEFAULT true,
+  receipt_url   text,
+  notes         text,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_project_expenses_updated_at BEFORE UPDATE ON public.project_expenses
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- 3.20 email sequences
+CREATE TABLE IF NOT EXISTS public.email_sequences (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  description   text NOT NULL DEFAULT '',
+  is_active     boolean NOT NULL DEFAULT false,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_email_sequences_updated_at BEFORE UPDATE ON public.email_sequences
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.sequence_steps (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sequence_id   uuid NOT NULL REFERENCES public.email_sequences(id) ON DELETE CASCADE,
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  order_index   integer NOT NULL DEFAULT 0,
+  subject       text NOT NULL DEFAULT '',
+  body          text NOT NULL DEFAULT '',
+  delay_days    integer NOT NULL DEFAULT 0,
+  status        text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_sequence_steps_updated_at BEFORE UPDATE ON public.sequence_steps
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.sequence_enrollments (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sequence_id   uuid NOT NULL REFERENCES public.email_sequences(id) ON DELETE CASCADE,
+  lead_id       uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  current_step  integer NOT NULL DEFAULT 0,
+  status        text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed', 'exited')),
+  enrolled_at   timestamptz NOT NULL DEFAULT now(),
+  last_sent_at  timestamptz,
+  next_send_at  timestamptz,
+  completed_at  timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_sequence_enrollments_updated_at BEFORE UPDATE ON public.sequence_enrollments
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- 3.21 api_keys
+CREATE TABLE IF NOT EXISTS public.api_keys (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  key_hash      text NOT NULL,
+  key_prefix    text NOT NULL,
+  scopes        text[] NOT NULL DEFAULT '{read,write}',
+  is_active     boolean NOT NULL DEFAULT true,
+  last_used_at  timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz
+);
+
+-- 3.22 notification webhooks (outgoing)
+CREATE TABLE IF NOT EXISTS public.notification_webhooks (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  type          text NOT NULL DEFAULT 'custom' CHECK (type IN ('slack', 'whatsapp', 'custom')),
+  url           text NOT NULL,
+  is_active     boolean NOT NULL DEFAULT true,
+  events        text[] NOT NULL DEFAULT '{}',
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_notification_webhooks_updated_at BEFORE UPDATE ON public.notification_webhooks
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- 3.23 magic-link client portals
+CREATE TABLE IF NOT EXISTS public.client_portals (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  client_id     uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  project_id    uuid REFERENCES public.projects(id) ON DELETE SET NULL,
+  token         text NOT NULL UNIQUE,
+  is_active     boolean NOT NULL DEFAULT true,
+  expires_at    timestamptz,
+  last_viewed_at timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_client_portals_updated_at BEFORE UPDATE ON public.client_portals
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.portal_signatures (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  portal_id     uuid NOT NULL REFERENCES public.client_portals(id) ON DELETE CASCADE,
+  signer_name   text NOT NULL,
+  signature_data text NOT NULL,
+  signed_at     timestamptz NOT NULL DEFAULT now()
+);
+
 -- ---------------------------------------------------------------------------
 -- 4. INDEXES
 -- ---------------------------------------------------------------------------
@@ -476,6 +656,15 @@ CREATE INDEX IF NOT EXISTS idx_credentials_project ON public.project_credentials
 CREATE INDEX IF NOT EXISTS idx_project_team_project ON public.project_team_members(project_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_project ON public.time_entries(project_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_date ON public.time_entries(date);
+CREATE INDEX IF NOT EXISTS idx_expenses_project ON public.project_expenses(project_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_user ON public.project_expenses(user_id);
+CREATE INDEX IF NOT EXISTS idx_sequence_steps_seq ON public.sequence_steps(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_seq ON public.sequence_enrollments(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON public.api_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_hash ON public.api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_webhooks_user ON public.notification_webhooks(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_client_portals_token ON public.client_portals(token);
+CREATE INDEX IF NOT EXISTS idx_client_portals_client ON public.client_portals(client_id);
 
 -- ---------------------------------------------------------------------------
 -- 5. ROW LEVEL SECURITY
@@ -500,6 +689,14 @@ ALTER TABLE public.project_todos    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.email_sequences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sequence_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sequence_enrollments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notification_webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client_portals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_signatures ENABLE ROW LEVEL SECURITY;
 
 -- profiles: user can manage their own profile
 CREATE POLICY "profiles_select_own" ON public.profiles
@@ -624,6 +821,66 @@ CREATE POLICY "project_team_all_own" ON public.project_team_members
 -- time_entries
 CREATE POLICY "time_entries_all_own" ON public.time_entries
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- project_expenses
+CREATE POLICY "expenses_all_own" ON public.project_expenses
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- email sequences
+CREATE POLICY "sequences_all_own" ON public.email_sequences
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "sequence_steps_all_own" ON public.sequence_steps
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "enrollments_all_own" ON public.sequence_enrollments
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- api_keys
+CREATE POLICY "api_keys_all_own" ON public.api_keys
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- notification webhooks
+CREATE POLICY "webhooks_all_own" ON public.notification_webhooks
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- client portals: owners manage; public lookup is via SECURITY DEFINER RPC
+CREATE POLICY "portals_all_own" ON public.client_portals
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "portal_signatures_via_owner" ON public.portal_signatures
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.client_portals p
+      WHERE p.id = portal_signatures.portal_id AND p.user_id = auth.uid()
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.client_portals p
+      WHERE p.id = portal_signatures.portal_id AND p.user_id = auth.uid()
+    )
+  );
+
+-- Public magic-link lookup (anon). Token is unguessable (32 bytes).
+CREATE OR REPLACE FUNCTION public.get_portal_by_token(p_token text)
+RETURNS TABLE (
+  portal_id uuid,
+  client_id uuid,
+  project_id uuid,
+  user_id uuid,
+  is_active boolean,
+  expires_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT id, client_id, project_id, user_id, is_active, expires_at
+  FROM public.client_portals
+  WHERE token = p_token
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_portal_by_token(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_portal_by_token(text) TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 6. SUPABASE STORAGE BUCKET + POLICIES

@@ -28,9 +28,13 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
+SET search_path = public
 AS $$
-  SELECT p.id, p.is_active, p.email
+  SELECT p.id AS profile_id, p.is_active, p.email
   FROM public.profiles p
   WHERE lower(p.username) = lower(p_username)
   LIMIT 1;
 $$;
+
+REVOKE ALL ON FUNCTION public.get_profile_by_username(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_profile_by_username(text) TO service_role;

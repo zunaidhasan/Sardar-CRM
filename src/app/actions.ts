@@ -26,6 +26,7 @@ import type {
   TeamRole,
   TimeEntry,
   ApiKeyRow,
+  WebhookConfig,
 } from "@/lib/types";
 import { resetDemo, demoDbPath } from "@/lib/db/demo-store";
 import * as apiKeysModule from "@/lib/api-keys";
@@ -949,6 +950,7 @@ export async function loginAction(
         path: "/",
         httpOnly: true,
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 30,
       });
     }
@@ -1506,5 +1508,104 @@ export async function bulkAutoScoreAction(
     return { ok: true, data: { updated, scores } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Bulk auto-score failed" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notification webhooks
+// ---------------------------------------------------------------------------
+export async function createWebhookAction(input: {
+  name: string;
+  type: "slack" | "whatsapp" | "custom";
+  url: string;
+  events: WebhookConfig["events"];
+}): Promise<ActionResult<WebhookConfig>> {
+  try {
+    const user = await data.requireUser();
+    const created = await data.createNotificationWebhook(user.id, {
+      name: input.name,
+      type: input.type,
+      url: input.url,
+      is_active: true,
+      events: input.events,
+    });
+    if (!created) return { ok: false, error: "Failed to create webhook" };
+    revalidatePath("/settings");
+    return { ok: true, data: created };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create webhook" };
+  }
+}
+
+export async function updateWebhookAction(
+  id: string,
+  patch: Partial<WebhookConfig>,
+): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.updateNotificationWebhook(user.id, id, patch);
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update webhook" };
+  }
+}
+
+export async function deleteWebhookAction(id: string): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.deleteNotificationWebhook(user.id, id);
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete webhook" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client portals
+// ---------------------------------------------------------------------------
+export async function createClientPortalAction(input: {
+  client_id: string;
+  project_id?: string | null;
+}): Promise<ActionResult<{ token: string; url: string }>> {
+  try {
+    const user = await data.requireUser();
+    const portal = await data.createClientPortal(user.id, input);
+    if (!portal) return { ok: false, error: "Failed to create portal link" };
+    revalidatePath("/clients");
+    revalidatePath(`/clients/${input.client_id}`);
+    return { ok: true, data: { token: portal.token, url: `/portal/${portal.token}` } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create portal link" };
+  }
+}
+
+export async function revokeClientPortalAction(id: string, clientId: string): Promise<ActionResult> {
+  try {
+    const user = await data.requireUser();
+    await data.revokeClientPortal(user.id, id);
+    revalidatePath(`/clients/${clientId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to revoke portal" };
+  }
+}
+
+export async function signPortalAction(input: {
+  token: string;
+  signerName: string;
+  signatureData: string;
+}): Promise<ActionResult> {
+  try {
+    const portal = await data.fetchPortalByToken(input.token);
+    if (!portal) return { ok: false, error: "Portal link is invalid or expired" };
+    if (!input.signerName.trim() || !input.signatureData.trim()) {
+      return { ok: false, error: "Name and signature are required" };
+    }
+    await data.addPortalSignature(portal.id, input.signerName.trim(), input.signatureData);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to save signature" };
   }
 }

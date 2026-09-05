@@ -34,6 +34,7 @@ import type {
   Activity,
   Attachment,
   Client,
+  ClientPortal,
   FollowUp,
   Opportunity,
   Project,
@@ -45,8 +46,10 @@ export interface ClientProfileData extends Client {
   activities: Activity[];
   follow_ups: FollowUp[];
   attachments: Attachment[];
+  portals: ClientPortal[];
 }
 
+import { PortalInvite } from "@/components/clients/portal-invite";
 import { CopyPersonalizedEmail } from "@/components/outbound/copy-personalized-email";
 import { LeadScoreBreakdown } from "@/components/outbound/lead-score-breakdown";
 import { AuditLogPanel } from "@/components/outbound/audit-log-panel";
@@ -247,6 +250,14 @@ export function ClientProfile({
                 )}
               </CardContent>
             </Card>
+
+            <div className="lg:col-span-2">
+              <PortalInvite
+                clientId={client.id}
+                projectId={client.projects[0]?.id ?? null}
+                portals={client.portals ?? []}
+              />
+            </div>
           </div>
         </TabsContent>
 

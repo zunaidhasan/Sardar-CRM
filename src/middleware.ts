@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isSupabaseConfigured } from "@/lib/utils";
 
-// Session refresh middleware. No-op in demo mode (no Supabase env vars).
+// Session refresh middleware. No-op in demo mode (missing or placeholder env).
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return NextResponse.next();
+  if (!isSupabaseConfigured(url, anonKey) || !url || !anonKey) return NextResponse.next();
 
   let response = NextResponse.next({ request });
 
@@ -18,7 +19,12 @@ export async function middleware(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
+          response.cookies.set(name, value, {
+            ...options,
+            sameSite: options?.sameSite ?? "lax",
+            secure: process.env.NODE_ENV === "production",
+            path: options?.path ?? "/",
+          }),
         );
       },
     },

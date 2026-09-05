@@ -82,6 +82,34 @@ export function uid(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const PLACEHOLDER_MARKERS = [
+  "your-project",
+  "your-project-ref",
+  "your-anon-key",
+  "example.supabase.co",
+];
+
+export function isSupabaseConfigured(
+  url: string | undefined,
+  anonKey: string | undefined,
+): boolean {
+  const u = (url ?? "").trim();
+  const k = (anonKey ?? "").trim();
+  if (!u || !k) return false;
+  const haystack = `${u} ${k}`.toLowerCase();
+  if (PLACEHOLDER_MARKERS.some((m) => haystack.includes(m))) return false;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  } catch {
+    return false;
+  }
+  return k.length >= 8;
+}
+
 export function isDemoMode(): boolean {
-  return !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return !isSupabaseConfigured(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
 }

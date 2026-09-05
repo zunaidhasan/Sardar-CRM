@@ -38,6 +38,9 @@ import type {
   TeamMember,
   TeamRole,
   TimeEntry,
+  ClientPortal,
+  PortalSignature,
+  WebhookConfig,
 } from "@/lib/types";
 import { hashPassword } from "@/lib/password";
 import { encryptSecret, isEncryptedSecret, isEncryptionEnabled } from "@/lib/credential-crypto";
@@ -66,6 +69,9 @@ export interface DemoDB {
   email_templates: EmailTemplate[];
   automation_rules: AutomationRule[];
   import_runs: ImportRun[];
+  client_portals: ClientPortal[];
+  portal_signatures: PortalSignature[];
+  notification_webhooks: WebhookConfig[];
 }
 
 const DB_PATH =
@@ -98,7 +104,7 @@ export function loadDB(): DemoDB {
         // older persisted files keep working without a full reseed. New
         // sections get the built-in demo rows (deterministic IDs referencing
         // seeded projects), not empty arrays, so the UI shows them working.
-        const NEW_TABLES = ["users", "project_todos", "project_credentials", "project_team_members", "time_entries"] as const;
+        const NEW_TABLES = ["users", "project_todos", "project_credentials", "project_team_members", "time_entries", "client_portals", "portal_signatures", "notification_webhooks"] as const;
         const missingTables = NEW_TABLES.filter(
           (t) => !Array.isArray((parsed as unknown as Record<string, unknown>)[t]),
         );
@@ -697,4 +703,20 @@ export function getAllExpenses(userId: string): ProjectExpense[] {
 export function getImportRuns(_userId: string): ImportRun[] {
   // Import audit history is workspace-level.
   return loadDB().import_runs;
+}
+
+export function getClientPortals(userId: string): ClientPortal[] {
+  return loadDB().client_portals.filter((p) => p.user_id === userId);
+}
+
+export function getClientPortalByToken(token: string): ClientPortal | null {
+  return loadDB().client_portals.find((p) => p.token === token) ?? null;
+}
+
+export function getPortalSignatures(portalId: string): PortalSignature[] {
+  return loadDB().portal_signatures.filter((s) => s.portal_id === portalId);
+}
+
+export function getNotificationWebhooks(userId: string): WebhookConfig[] {
+  return loadDB().notification_webhooks.filter((w) => w.user_id === userId);
 }

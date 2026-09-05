@@ -107,3 +107,69 @@ export function calculateOpportunityWinScore(
     nextAction,
   };
 }
+
+export interface BidToWinResult {
+  wonCount: number;
+  lostCount: number;
+  avgWonLength: number;
+  avgLostLength: number;
+  insights: string[];
+}
+
+function proposalText(o: Opportunity): string {
+  return `${o.title} ${o.notes ?? ""} ${o.description ?? ""}`.trim();
+}
+
+function mentionsClientName(text: string): boolean {
+  const first = text.split(/\s+/).find((w) => /^[A-Z][a-z]{2,}$/.test(w));
+  if (!first) return false;
+  const body = text.slice(text.indexOf(first) + first.length);
+  return new RegExp(`\\b${first}\\b`, "i").test(body);
+}
+
+export function analyzeBidToWin(opportunities: Opportunity[]): BidToWinResult {
+  const won = opportunities.filter((o) => o.stage === "won");
+  const lost = opportunities.filter((o) => o.stage === "lost");
+  if (won.length === 0 && lost.length === 0) {
+    return { wonCount: 0, lostCount: 0, avgWonLength: 0, avgLostLength: 0, insights: [] };
+  }
+
+  const wonLens = won.map((o) => proposalText(o).length);
+  const lostLens = lost.map((o) => proposalText(o).length);
+  const avgWonLength = wonLens.length
+    ? Math.round(wonLens.reduce((s, n) => s + n, 0) / wonLens.length)
+    : 0;
+  const avgLostLength = lostLens.length
+    ? Math.round(lostLens.reduce((s, n) => s + n, 0) / lostLens.length)
+    : 0;
+
+  const insights: string[] = [];
+  if (won.length && lost.length && avgWonLength < avgLostLength) {
+    const pct = Math.round(((avgLostLength - avgWonLength) / avgLostLength) * 100);
+    insights.push(
+      `Your winning proposals are ${pct}% shorter than lost ones. Keep the next bid concise.`,
+    );
+  }
+
+  const wonNamed = won.filter((o) => mentionsClientName(proposalText(o))).length;
+  if (won.length && wonNamed / won.length >= 0.5) {
+    insights.push("Winning proposals mention the client's name. Apply this to your next bid.");
+  }
+
+  const wonPortfolio = won.filter((o) => /https?:\/\/|portfolio/i.test(proposalText(o))).length;
+  if (won.length && wonPortfolio / won.length >= 0.5) {
+    insights.push("Winning proposals include a portfolio link. Add one to your next bid.");
+  }
+
+  if (lost.some((o) => (o.lost_reason ?? "").toLowerCase().includes("expensive"))) {
+    insights.push("Lost deals often cite price. Lead with value and a smaller first milestone.");
+  }
+
+  if (insights.length === 0 && won.length) {
+    insights.push(
+      `You have ${won.length} won deal${won.length === 1 ? "" : "s"}. Reuse the structure of your shortest winning note on the next bid.`,
+    );
+  }
+
+  return { wonCount: won.length, lostCount: lost.length, avgWonLength, avgLostLength, insights };
+}
